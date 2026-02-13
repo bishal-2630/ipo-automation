@@ -16,9 +16,15 @@ TPIN = os.getenv("TPIN")
 BANK_NAME = os.getenv("BANK_NAME")
 KITTA = os.getenv("KITTA", "10")
 
-# --- CHANGE THIS IF TESSERACT IS INSTALLED SOMEWHERE ELSE ---
-# Default Windows installation path
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# --- TESSERACT CONFIGURATION ---
+# On Windows, we need to point to the exe if not in PATH.
+# On Linux (GitHub Actions), 'tesseract' is usually in PATH after install.
+if os.name == 'nt':
+    TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    if os.path.exists(TESSERACT_PATH):
+        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+    else:
+        print(f"⚠️ Warning: Tesseract not found at {TESSERACT_PATH}. Assuming it's in PATH.")
 
 def solve_captcha(page):
     """
