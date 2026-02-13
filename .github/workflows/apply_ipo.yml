@@ -31,16 +31,8 @@ jobs:
 
     - name: Run IPO Automation Script
       env:
-        MEROSHARE_USER: ${{ secrets.MEROSHARE_USER }}
-        MEROSHARE_PASS: ${{ secrets.MEROSHARE_PASS }}
-        DP_NAME: ${{ secrets.DP_NAME }}
-        CRN: ${{ secrets.CRN }}
-        TPIN: ${{ secrets.TPIN }}
-        BANK_NAME: ${{ secrets.BANK_NAME }}
-        KITTA: ${{ secrets.KITTA }}
+        # We now use a single JSON secret for multiple accounts
+        # If this is empty, the script will look for individual env vars (backward compatibility)
+        ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
       run: |
-        # Override Tesseract path for Linux environment
-        # Only for this run, we can set an env var or modify the script dynamically
-        # But simpler: check OS in python or just set tesseract command in python if default doesn't work.
-        # On Ubuntu, tesseract is usually in path, so 'tesseract' works directly.
         python main.py
