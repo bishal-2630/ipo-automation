@@ -82,14 +82,21 @@ def run_automation():
             page.wait_for_selector("input[name='confirmationCode']")
             page.fill("input[name='confirmationCode']", TPIN)
             
-            print("🚀 TPIN entered. Review the page and press Submit if everything looks correct.")
+            # small delay to ensure field is processed
+            page.wait_for_timeout(1000)
             
+            print("🚀 TPIN entered. Submitting application...")
+            # The final button is also usually 'Apply' but can be identified by its position/class
+            # In Meroshare, it's often a button with text 'Apply' in the footer of the TPIN modal
+            page.click("button:has-text('Apply')")
+            
+            # Wait for success message or a few seconds to see result
+            print("✅ IPO application submitted automatically!")
         else:
-            print("⚠️ TPIN not found in .env. Please enter it manually.")
+            print("⚠️ TPIN not found in .env. Please enter it manually and click Apply.")
 
-        print("✅ Process complete. Please review and click 'Apply/Submit' to finish.")
-        input("Press ENTER to close the browser...")
-        
+        print("🏁 Automation complete.")
+        page.wait_for_timeout(5000) # Give 5 seconds to see result before closing
         browser.close()
 
 if __name__ == "__main__":
