@@ -1,0 +1,46 @@
+name: IPO Automation Daily
+
+on:
+  schedule:
+    # Runs at 10:00 AM Nepal Time (UTC +5:45) => approx 4:15 AM UTC
+    - cron: '15 4 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  apply-ipo:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install System Dependencies (Tesseract OCR)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr libtesseract-dev
+
+    - name: Install Python Dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+
+    - name: Run IPO Automation Script
+      env:
+        MEROSHARE_USER: ${{ secrets.MEROSHARE_USER }}
+        MEROSHARE_PASS: ${{ secrets.MEROSHARE_PASS }}
+        DP_NAME: ${{ secrets.DP_NAME }}
+        CRN: ${{ secrets.CRN }}
+        TPIN: ${{ secrets.TPIN }}
+        BANK_NAME: ${{ secrets.BANK_NAME }}
+        KITTA: ${{ secrets.KITTA }}
+      run: |
+        # Override Tesseract path for Linux environment
+        # Only for this run, we can set an env var or modify the script dynamically
+        # But simpler: check OS in python or just set tesseract command in python if default doesn't work.
+        # On Ubuntu, tesseract is usually in path, so 'tesseract' works directly.
+        python main.py
