@@ -269,8 +269,28 @@ def apply_ipo(page, account):
 
         page.wait_for_timeout(1000) 
         
+        # NEW: Handle Bank Account Number selection (identifed as 'invalid' field in diagnostics)
+        print(f"[{username}] Selecting Bank Account Number...")
+        page.wait_for_selector("#accountNumber", timeout=10000)
+        account_selected = page.evaluate("""
+            () => {
+                const select = document.querySelector('#accountNumber');
+                if (!select) return "NOT_FOUND";
+                const options = Array.from(select.options);
+                const validOptions = options.filter(o => o.innerText.trim() !== '' && !o.innerText.toLowerCase().includes('choose'));
+                if (validOptions.length > 0) {
+                    select.value = validOptions[0].value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    select.dispatchEvent(new Event('input', { bubbles: true }));
+                    return validOptions[0].innerText.trim();
+                }
+                return "NONE_FOUND";
+            }
+        """)
+        print(f"[{username}] Selected Account: {account_selected}")
+
     except Exception as e:
-        print(f"[{username}] Bank/Branch selection failed. Diagnostics:")
+        print(f"[{username}] Bank/Branch/Account selection failed. Diagnostics:")
         page.screenshot(path=f"debug_bank_fail_{username}.png")
         raise e
 
@@ -348,6 +368,10 @@ def apply_ipo(page, account):
         print(f"[{username}] Entering TPIN...")
         # Exact ID is #transactionPIN
         page.wait_for_selector("#transactionPIN", timeout=10000)
+        
+        # NEW: Explicitly click the field before typing to trigger focus-dependent logic
+        page.click("#transactionPIN")
+        page.wait_for_timeout(300)
         
         # Use type() for TPIN to ensure events fire
         page.locator("#transactionPIN").clear()
