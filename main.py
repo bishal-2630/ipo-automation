@@ -197,27 +197,11 @@ def apply_ipo(page, account):
     
     print(f"Selecting Bank: {bank_name}...")
     try:
-        # Flexible selectors to avoid timeouts on hidden elements
-        bank_selectors = [
-            "span.select2-selection",
-            ".select2-container",
-            "select[name='bank']",
-            "[name='bank']"
-        ]
-        
-        found_selector = None
-        for sel in bank_selectors:
-            if page.locator(sel).first.is_visible():
-                found_selector = sel
-                break
-        
-        if not found_selector:
-            # Fallback to waiting for the primary container
-            page.wait_for_selector(".select2-container, select[name='bank']", timeout=10000)
-            found_selector = ".select2-container"
-            
-        page.click(found_selector)
+        # Revert to the version that worked in Step 451
+        page.wait_for_selector("[name='bank']", timeout=20000)
+        page.click("[name='bank']")
         page.wait_for_timeout(1000) 
+        
         page.keyboard.type(bank_name)
         page.wait_for_timeout(2000) 
         
