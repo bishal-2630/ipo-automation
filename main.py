@@ -232,11 +232,37 @@ def apply_ipo(page, account):
         raise e
 
     page.fill("input[name='appliedKitta']", kitta)
+    page.keyboard.press("Tab") # Trigger validation
+    page.wait_for_timeout(500)
+    
     page.fill("input[name='crnNumber']", crn)
+    page.keyboard.press("Tab") # Trigger validation
+    page.wait_for_timeout(500)
+    
     page.check("input[type='checkbox']")
-    print(f"Form filled.")
+    
+    # NEW: Final "blur" click on the background to ensure all listeners see the changes
+    page.mouse.click(0, 0)
+    page.wait_for_timeout(1000)
+    
+    print(f"Form filled. Checking Proceed button state...")
+    
+    # Diagnostic: Check if button is enabled
+    proceed_btn = page.locator("button:has-text('Proceed')")
+    is_disabled = proceed_btn.evaluate("node => node.disabled")
+    
+    if is_disabled:
+        print(f"Warning: Proceed button is still DISABLED. Trying to force validation...")
+        # Jiggle the checkbox
+        page.uncheck("input[type='checkbox']")
+        page.wait_for_timeout(500)
+        page.check("input[type='checkbox']")
+        page.wait_for_timeout(1000)
+        is_disabled = proceed_btn.evaluate("node => node.disabled")
+        print(f"New Proceed state: {'DISABLED' if is_disabled else 'ENABLED'}")
 
-    page.click("button:has-text('Proceed')")
+    # Use a force click in case it's technically disabled but logically valid
+    proceed_btn.click(force=True)
 
     if tpin:
         print(f"[{username}] Entering TPIN...")
