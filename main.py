@@ -214,6 +214,9 @@ def apply_ipo(page, account):
         page.wait_for_timeout(1000) 
         page.keyboard.type(bank_name)
         page.wait_for_timeout(1000) 
+        # NEW: Force selection from dropdown highlights before Enter
+        page.keyboard.press("ArrowDown")
+        page.wait_for_timeout(500)
         page.keyboard.press("Enter")
         page.wait_for_timeout(1000) 
 
@@ -231,14 +234,20 @@ def apply_ipo(page, account):
         page.screenshot(path=f"debug_bank_fail_{username}.png")
         raise e
 
-    page.fill("input[name='appliedKitta']", kitta)
-    page.keyboard.press("Tab") # Trigger validation
+    # Use type instead of fill to trigger keydown/keyup events
+    page.locator("input[name='appliedKitta']").clear()
+    page.locator("input[name='appliedKitta']").type(kitta)
+    page.keyboard.press("Tab") 
     page.wait_for_timeout(500)
     
-    page.fill("input[name='crnNumber']", crn)
-    page.keyboard.press("Tab") # Trigger validation
+    page.locator("input[name='crnNumber']").clear()
+    page.locator("input[name='crnNumber']").type(crn)
+    page.keyboard.press("Tab") 
     page.wait_for_timeout(500)
     
+    # Re-click checkbox to force validation event
+    page.uncheck("input[type='checkbox']")
+    page.wait_for_timeout(500)
     page.check("input[type='checkbox']")
     
     # NEW: Final "blur" click on the background to ensure all listeners see the changes
