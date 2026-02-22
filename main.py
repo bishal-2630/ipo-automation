@@ -310,15 +310,33 @@ def apply_ipo(page, account):
         page.fill("#transactionPIN", tpin)
         
         page.wait_for_timeout(1000)
+        page.wait_for_timeout(1000)
         print(f"[{username}] Submitting application...")
-        # Confirming Apply button text
-        page.click("button:has-text('Apply')")
+        
+        # Click Apply and wait for ANY toast or navigation
+        page.click("button:has-text('Apply')", force=True)
+        
+        # Take a screenshot immediately to see if any error message flashes
+        page.wait_for_timeout(2000)
+        page.screenshot(path=f"debug_after_apply_{username}.png")
         
         try:
-            page.wait_for_selector(".toast-success", timeout=5000)
-            print(f"Application SUCCESS!")
+            # Wait for any toast to appear
+            toast = page.wait_for_selector(".toast-message, .alert, .toast-success, .toast-error", timeout=10000)
+            toast_text = toast.inner_text().strip()
+            print(f"[{username}] Server Response: {toast_text}")
+            
+            if "success" in toast_text.lower() or "successfully" in toast_text.lower():
+                print(f"Application SUCCESS!")
+            else:
+                print(f"Application FAILED: {toast_text}")
         except:
-             print(f"Warning: [{username}] Success message not detected, but submitted.")
+             print(f"Warning: [{username}] No response toast detected. Checking for modal closure...")
+             if not page.is_visible("#transactionPIN"):
+                 print(f"[{username}] Modal closed. Likely SUCCESS, but not confirmed.")
+             else:
+                 print(f"Error: [{username}] Modal still open. Application FAILED.")
+                 page.screenshot(path=f"debug_apply_fail_{username}.png")
     else:
         print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
 
