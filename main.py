@@ -197,52 +197,53 @@ def apply_ipo(page, account):
     
     print(f"Selecting Bank: {bank_name}...")
     try:
-        # 1. Click the dropdown container
-        bank_selector = ".select2-container" # Standard Select2 container
-        if not page.locator(bank_selector).first.is_visible():
-             bank_selector = "[name='bank']"
-             
-        page.wait_for_selector(bank_selector, timeout=10000)
-        page.click(bank_selector)
+        # Flexible selectors to avoid timeouts on hidden elements
+        bank_selectors = [
+            "span.select2-selection",
+            ".select2-container",
+            "select[name='bank']",
+            "[name='bank']"
+        ]
+        
+        found_selector = None
+        for sel in bank_selectors:
+            if page.locator(sel).first.is_visible():
+                found_selector = sel
+                break
+        
+        if not found_selector:
+            # Fallback to waiting for the primary container
+            page.wait_for_selector(".select2-container, select[name='bank']", timeout=10000)
+            found_selector = ".select2-container"
+            
+        page.click(found_selector)
         page.wait_for_timeout(1000) 
-        
-        # 2. Type clearly
         page.keyboard.type(bank_name)
-        page.wait_for_timeout(2000) # Give it more time to filter
+        page.wait_for_timeout(2000) 
         
-        # 3. Find and click the actual list item from the results
-        # Select2 results usually appear in a <ul> with class .select2-results__options
-        try:
-            # Look for the visible result item that matches
-            page.wait_for_selector(".select2-results__option--highlighted", timeout=5000)
+        # Try to click highlighting or just Enter
+        if page.locator(".select2-results__option--highlighted").is_visible():
             page.click(".select2-results__option--highlighted")
-        except:
-            # Fallback: Just press Enter if the highlight isn't found
+        else:
             page.keyboard.press("Enter")
-        
+            
         page.wait_for_timeout(1000) 
 
     except Exception as e:
-        print(f"[{username}] Could not select bank. Capture results:")
+        print(f"[{username}] Could not select bank. Capture state:")
         page.screenshot(path=f"debug_bank_results_{username}.png")
         raise e
 
-    # Use type + forced events to ensure Angular/React gets the message
-    kitta_loc = page.locator("input[name='appliedKitta']")
-    kitta_loc.clear()
-    kitta_loc.type(kitta)
-    kitta_loc.dispatch_event('input')
-    kitta_loc.dispatch_event('change')
-    page.wait_for_timeout(500)
+    # Trigger validation for numeric fields
+    for field in ["appliedKitta", "crnNumber"]:
+        loc = page.locator(f"input[name='{field}']")
+        loc.clear()
+        loc.type(account.get('KITTA', '10') if field == 'appliedKitta' else account['CRN'])
+        loc.dispatch_event('input')
+        loc.dispatch_event('change')
+        page.wait_for_timeout(500)
     
-    crn_loc = page.locator("input[name='crnNumber']")
-    crn_loc.clear()
-    crn_loc.type(crn)
-    crn_loc.dispatch_event('input')
-    crn_loc.dispatch_event('change')
-    page.wait_for_timeout(500)
-    
-    # Re-click checkbox to force validation event
+    # Checkbox jiggle
     page.uncheck("input[type='checkbox']")
     page.wait_for_timeout(500)
     page.check("input[type='checkbox']")
@@ -257,11 +258,10 @@ def apply_ipo(page, account):
     
     if is_disabled:
         print(f"Warning: Proceed button is still DISABLED. Forcing it to enable...")
-        # LAST RESORT: Manually remove the disabled attribute via JS
-        proceed_btn.evaluate("node => node.disabled = false")
+        # Last resort: Force enable via JS
+        page.evaluate("() => { Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Proceed')).disabled = false; }")
         page.wait_for_timeout(500)
 
-    # Force the click even if technically disabled
     proceed_btn.click(force=True)
 
     if tpin:
