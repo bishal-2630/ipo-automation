@@ -197,11 +197,26 @@ def apply_ipo(page, account):
     
     print(f"Selecting Bank: {bank_name}...")
     try:
-        # Revert to the version that worked in Step 451
-        page.wait_for_selector("[name='bank']", timeout=20000)
-        page.click("[name='bank']")
-        page.wait_for_timeout(1000) 
+        # 1. Broad wait for any select or bank-related element
+        # We try to wait for existence (attached) rather than visibility first
+        page.wait_for_selector("select, .select2-container, text=Bank", timeout=20000, state="attached")
         
+        found_selector = None
+        # Try preferred selectors first
+        for sel in ["[name='bank']", "select", ".select2-container"]:
+            loc = page.locator(sel).first
+            if loc.is_visible():
+                found_selector = sel
+                break
+        
+        if found_selector:
+            page.click(found_selector)
+        else:
+            # Fallback: find by label
+            print(f"[{username}] Preferred selectors not visible, trying text search...")
+            page.click("text=Select Bank", timeout=5000)
+            
+        page.wait_for_timeout(1000) 
         page.keyboard.type(bank_name)
         page.wait_for_timeout(2000) 
         
@@ -214,8 +229,23 @@ def apply_ipo(page, account):
         page.wait_for_timeout(1000) 
 
     except Exception as e:
-        print(f"[{username}] Could not select bank. Capture state:")
-        page.screenshot(path=f"debug_bank_results_{username}.png")
+        print(f"[{username}] Bank selection failed. DIAGNOSTICS:")
+        # Diagnostic: List all frames
+        print(f"Frames found: {[f.name or f.url for f in page.frames]}")
+        # Diagnostic: List all inputs/selects on the page
+        elements = page.query_selector_all("input, select, button, .select2-container")
+        print(f"Found {len(elements)} relevant elements:")
+        for el in elements:
+            try:
+                tag = el.evaluate("node => node.tagName")
+                name = el.get_attribute("name") or "NO_NAME"
+                id_ = el.get_attribute("id") or "NO_ID"
+                text = el.inner_text().strip()[:30]
+                print(f"  - {tag}: id={id_}, name={name}, text='{text}'")
+            except:
+                pass
+        
+        page.screenshot(path=f"debug_bank_fail_{username}.png")
         raise e
 
     # Trigger validation for numeric fields
