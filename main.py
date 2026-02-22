@@ -22,9 +22,16 @@ def solve_captcha(page):
     Locates the CAPTCHA image, takes a screenshot, and uses Tesseract to read it.
     """
     try:
-        captcha_elem = page.wait_for_selector(".captcha-image", timeout=5000)
+        # Increase timeout and add diagnostic screenshot
+        try:
+            captcha_elem = page.wait_for_selector(".captcha-image", timeout=15000)
+        except Exception as e:
+            print(f"Error: CAPTCHA not visible after 15s. Capturing state...")
+            page.screenshot(path="debug_captcha_missing.png")
+            raise e
+
         if not captcha_elem:
-            print("Warning: CAPTCHA image not found!")
+            print("Warning: CAPTCHA image element not found!")
             return None
         
         captcha_path = "captcha.png"
