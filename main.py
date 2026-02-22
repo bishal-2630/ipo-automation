@@ -199,57 +199,61 @@ def apply_ipo(page, account):
     try:
         page.wait_for_selector("#selectBank", timeout=20000)
         
-        # Log available options for debugging
-        options = page.locator("#selectBank option").all_inner_texts()
-        print(f"[{username}] Available banks: {[o.strip() for o in options[:5]]}...")
+        # BRUTE FORCE JS SELECTION: This finds the option by text and forces selection/events
+        # It handles partial, case-insensitive, and stripped matching
+        selected_bank = page.evaluate(f"""
+            (bankName) => {{
+                const select = document.querySelector('#selectBank');
+                if (!select) return "NOT_FOUND";
+                const options = Array.from(select.options);
+                const target = bankName.toLowerCase().trim();
+                const match = options.find(o => o.innerText.toLowerCase().trim().includes(target));
+                if (match) {{
+                    select.value = match.value;
+                    select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    select.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    return match.innerText.trim();
+                }}
+                return "FAIL: " + options.map(o => o.innerText.trim()).join(', ');
+            }}
+        """, bank_name)
         
-        # Robust matching: strip whitespace and check
-        target_option = None
-        for opt in options:
-            if opt.strip() == bank_name.strip():
-                target_option = opt
-                break
+        if "FAIL" in selected_bank:
+             raise Exception(f"Bank selection failed: {{selected_bank}}")
+        print(f"[{{username}}] Selected Bank: {{selected_bank}}")
         
-        if target_option:
-            page.select_option("#selectBank", label=target_option)
-        else:
-            # Try partial match as fallback
-            print(f"[{username}] Exact match failed for '{bank_name}'. Trying partial match...")
-            for opt in options:
-                if bank_name.lower().strip() in opt.lower().strip():
-                    target_option = opt
-                    break
-            if target_option:
-                print(f"[{username}] Found partial match: '{target_option.strip()}'")
-                page.select_option("#selectBank", label=target_option)
-            else:
-                raise Exception(f"Bank '{bank_name}' not found in dropdown list. Options were: {[o.strip() for o in options]}")
-
         page.wait_for_timeout(1500) # Wait for Branch to populate
         
-        # Handle Branch selection
-        print(f"[{username}] Selecting Branch...")
-        try:
-            page.wait_for_selector("#selectBranch option", timeout=5000)
-            branch_options = page.locator("#selectBranch option").all_inner_texts()
-            valid_branches = [b for b in branch_options if "choose" not in b.lower() and b.strip()]
-            
-            if valid_branches:
-                print(f"[{username}] Selecting branch: {valid_branches[0].strip()}")
-                page.select_option("#selectBranch", label=valid_branches[0])
-            else:
-                 print(f"[{username}] No branches found in dropdown, trying keyboard selection...")
-                 page.click("#selectBranch")
-                 page.keyboard.press("ArrowDown")
-                 page.keyboard.press("Enter")
-        except:
-            print(f"[{username}] Branch selection failed or not required. Proceeding...")
+        # BRUTE FORCE BRANCH SELECTION: Picks the first valid branch
+        print(f"[{{username}}] Selecting Branch...")
+        selected_branch = page.evaluate("""
+            () => {
+                const select = document.querySelector('#selectBranch');
+                if (!select) return "NOT_FOUND";
+                const options = Array.from(select.options);
+                // Filter out 'Please choose one' and empty options
+                const validOptions = options.filter(o => !o.innerText.toLowerCase().includes('choose') && o.innerText.trim() !== '');
+                if (validOptions.length > 0) {
+                    const match = validOptions[0];
+                    select.value = match.value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    select.dispatchEvent(new Event('input', { bubbles: true }));
+                    return match.innerText.trim();
+                }
+                return "NONE_FOUND";
+            }
+        """)
+        
+        if selected_branch in ["NOT_FOUND", "NONE_FOUND"]:
+             print(f"[{{username}}] Branch selection auto-skipped: {{selected_branch}}")
+        else:
+             print(f"[{{username}}] Selected Branch: {{selected_branch}}")
 
         page.wait_for_timeout(1000) 
         
     except Exception as e:
-        print(f"[{username}] Bank/Branch selection failed. Diagnostics:")
-        page.screenshot(path=f"debug_bank_fail_{username}.png")
+        print(f"[{{username}}] Bank/Branch selection failed. Diagnostics:")
+        page.screenshot(path=f"debug_bank_fail_{{username}}.png")
         raise e
 
     # Use exact IDs from diagnostics for Kitta and CRN
