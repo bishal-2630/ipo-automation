@@ -319,11 +319,22 @@ def apply_ipo(page, account):
     is_disabled = proceed_btn.evaluate("node => node.disabled")
     
     if is_disabled:
-        print(f"Warning: Proceed button is still DISABLED. Form diagnostics:")
+        print(f"Warning: Proceed button is still DISABLED. Deep Diagnostics:")
+        # Check which fields have the 'ng-invalid' class
+        invalid_fields = page.evaluate("""
+            () => {
+                const fields = Array.from(document.querySelectorAll('input, select'));
+                return fields
+                    .filter(f => f.classList.contains('ng-invalid'))
+                    .map(f => `${f.tagName}#${f.id} (${f.name})`);
+            }
+        """)
+        print(f"[{username}] Invalid Fields detected: {invalid_fields}")
+        
         # One last attempt: click Kitta and press Enter
         page.click("#appliedKitta")
         page.keyboard.press("Enter")
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(1000)
         is_disabled = proceed_btn.evaluate("node => node.disabled")
         
         if is_disabled:
@@ -337,16 +348,34 @@ def apply_ipo(page, account):
         print(f"[{username}] Entering TPIN...")
         # Exact ID is #transactionPIN
         page.wait_for_selector("#transactionPIN", timeout=10000)
-        page.fill("#transactionPIN", tpin)
+        
+        # Use type() for TPIN to ensure events fire
+        page.locator("#transactionPIN").clear()
+        page.locator("#transactionPIN").type(tpin)
+        page.wait_for_timeout(500)
+        page.keyboard.press("Tab") # Blur to trigger validation
         
         page.wait_for_timeout(1000)
-        page.wait_for_timeout(1000)
-        print(f"[{username}] Submitting application...")
+        print(f"[{username}] Clicking 'Apply' in modal...")
         
-        # Click Apply and wait for ANY toast or navigation
-        page.click("button:has-text('Apply')", force=True)
+        # Targeted Apply button - usually in the footer or has a specific class
+        apply_selectors = [".modal-footer button:has-text('Apply')", "button:has-text('Apply')"]
+        applied = False
+        for selector in apply_selectors:
+             # Find visible ones only
+             btns = page.locator(selector).all()
+             for btn in btns:
+                 if btn.is_visible():
+                     btn.click()
+                     applied = True
+                     break
+             if applied: break
         
-        # Take a screenshot immediately to see if any error message flashes
+        if not applied:
+            print(f"Warning: [{username}] Could not find visible Apply button. Using force click...")
+            page.click("button:has-text('Apply')", force=True)
+        
+        # Take a screenshot immediately to see any toast or error
         page.wait_for_timeout(2000)
         page.screenshot(path=f"debug_after_apply_{username}.png")
         
@@ -360,12 +389,17 @@ def apply_ipo(page, account):
                 print(f"Application SUCCESS!")
             else:
                 print(f"Application FAILED: {toast_text}")
+                page.screenshot(path=f"debug_apply_rejection_{username}.png")
         except:
              print(f"Warning: [{username}] No response toast detected. Checking for modal closure...")
              if not page.is_visible("#transactionPIN"):
-                 print(f"[{username}] Modal closed. Likely SUCCESS, but not confirmed.")
+                 print(f"[{username}] Modal closed. Likely SUCCESS!")
              else:
-                 print(f"Error: [{username}] Modal still open. Application FAILED.")
+                 print(f"Error: [{username}] Modal still open. Application likely REJECTED.")
+                 # Final diagnostic: Check for any red text inside the modal
+                 modal_errors = page.locator(".modal-body .text-danger, .modal-body .alert").all_inner_texts()
+                 if modal_errors:
+                      print(f"[{username}] Modal Errors: {modal_errors}")
                  page.screenshot(path=f"debug_apply_fail_{username}.png")
     else:
         print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
