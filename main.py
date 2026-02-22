@@ -49,9 +49,19 @@ def login(page, username, password, dp_name):
     print(f"🏢 Selecting DP: {dp_name}...")
     page.wait_for_selector("#selectBranch")
     page.click("#selectBranch")
+    page.wait_for_timeout(1000) # Wait for dropdown to open
     page.keyboard.type(dp_name)
+    page.wait_for_timeout(1000) # Wait for search results
     page.keyboard.press("Enter")
-    page.fill("#txtUserName", username)
+    page.wait_for_timeout(1000) # Wait for dropdown to close
+    
+    try:
+        page.wait_for_selector("#txtUserName", timeout=10000)
+        page.fill("#txtUserName", username)
+    except Exception as e:
+        print(f"❌ [{username}] Username field not found after DP selection: {e}")
+        page.screenshot(path=f"debug_login_dp_{username}.png")
+        raise e
     page.fill("#txtPassword", password)
     
     captcha_text = solve_captcha(page)
@@ -131,8 +141,11 @@ def apply_ipo(page, account):
     print(f"🏦 Selecting Bank: {bank_name}...")
     page.wait_for_selector("select[name='bank']")
     page.click("select[name='bank']")
+    page.wait_for_timeout(1000) # Wait for dropdown to open
     page.keyboard.type(bank_name)
+    page.wait_for_timeout(1000) # Wait for search results
     page.keyboard.press("Enter")
+    page.wait_for_timeout(1000) # Wait for dropdown to close
     page.fill("input[name='appliedKitta']", kitta)
     page.fill("input[name='crnNumber']", crn)
     page.check("input[type='checkbox']")
