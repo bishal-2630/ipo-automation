@@ -78,7 +78,12 @@ def login(page, username, password, dp_name):
         print(f"[{username}] Could not find username field. State at failure:")
         # Diagnostic: List all inputs found on the page
         inputs = page.query_selector_all("input")
-        print(f"Found {len(inputs)} inputs: {[f'id={el.get_attribute('id')}, name={el.get_attribute('name')}' for el in inputs]}")
+        input_info = []
+        for el in inputs:
+            i_id = el.get_attribute("id")
+            i_name = el.get_attribute("name")
+            input_info.append(f"id={i_id}, name={i_name}")
+        print(f"Found {len(inputs)} inputs: {input_info}")
         page.screenshot(path=f"debug_login_dp_{username}.png")
         raise e
     page.fill("#txtPassword", password)
