@@ -336,104 +336,56 @@ def apply_ipo(page, account):
     
     print(f"Form filled. Checking Proceed button state...")
     proceed_btn = page.locator("button:has-text('Proceed')")
-    is_disabled = proceed_btn.evaluate("node => node.disabled")
     
-    if is_disabled:
-        print(f"Warning: Proceed button is still DISABLED. Deep Diagnostics:")
-        # Check which fields have the 'ng-invalid' class
-        invalid_fields = page.evaluate("""
-            () => {
-                const fields = Array.from(document.querySelectorAll('input, select'));
-                return fields
-                    .filter(f => f.classList.contains('ng-invalid'))
-                    .map(f => `${f.tagName}#${f.id} (${f.name})`);
-            }
-        """)
-        print(f"[{username}] Invalid Fields detected: {invalid_fields}")
-        
-        # One last attempt: click Kitta and press Enter
-        page.click("#appliedKitta")
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(1000)
-        is_disabled = proceed_btn.evaluate("node => node.disabled")
-        
-        if is_disabled:
-            print(f"Forcing Proceed button to enable as last resort...")
-            page.evaluate("() => { Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Proceed')).disabled = false; }")
-            page.wait_for_timeout(500)
+    # Wait for natural enabled state if possible
+    try:
+        page.wait_for_function("document.querySelector('button:has-text(\"Proceed\")').disabled === false", timeout=5000)
+    except:
+        pass
 
-    proceed_btn.click(force=True)
+    proceed_btn.click()
 
     if tpin:
         print(f"[{username}] Entering TPIN...")
-        # Exact ID is #transactionPIN
         page.wait_for_selector("#transactionPIN", timeout=10000)
         
-        # NEW: Explicitly click the field before typing to trigger focus-dependent logic
-        page.click("#transactionPIN")
-        page.wait_for_timeout(300)
-        
-        # Use type() for TPIN to ensure events fire
+        page.locator("#transactionPIN").click()
         page.locator("#transactionPIN").clear()
         page.locator("#transactionPIN").type(tpin)
-        page.wait_for_timeout(500)
-        page.keyboard.press("Tab") # Blur to trigger validation
+        page.keyboard.press("Tab") 
         
         page.wait_for_timeout(1000)
-        print(f"[{username}] Clicking 'Apply' in modal...")
+        print(f"[{username}] Submitting application...")
         
-        # Targeted Apply button - usually in the footer or has a specific class
-        apply_selectors = [".modal-footer button:has-text('Apply')", "button:has-text('Apply')"]
-        applied = False
-        for selector in apply_selectors:
-             # Find visible ones only
-             btns = page.locator(selector).all()
-             for btn in btns:
-                 if btn.is_visible():
-                     btn.click()
-                     applied = True
-                     break
-             if applied: break
-        
-        if not applied:
-            print(f"Warning: [{username}] Could not find visible Apply button. Using force click...")
-            page.click("button:has-text('Apply')", force=True)
-        
-        # Take a screenshot immediately to see any toast or error
-        page.wait_for_timeout(2000)
-        page.screenshot(path=f"debug_after_apply_{username}.png")
+        # Click Apply
+        apply_btn = page.locator(".modal-footer button:has-text('Apply')").first
+        if not apply_btn.is_visible():
+            apply_btn = page.locator("button:has-text('Apply')").first
+            
+        apply_btn.click()
         
         try:
-            # Wait for any toast to appear
-            toast = page.wait_for_selector(".toast-message, .alert, .toast-success, .toast-error", timeout=10000)
+            # Wait for success toast
+            toast = page.wait_for_selector(".toast-success, .toast-message", timeout=10000)
             toast_text = toast.inner_text().strip()
-            print(f"[{username}] Server Response: {toast_text}")
+            print(f"[{username}] Result: {toast_text}")
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
             else:
-                print(f"Application FAILED: {toast_text}")
-                page.screenshot(path=f"debug_apply_rejection_{username}.png")
+                print(f"Application Result: {toast_text}")
         except:
-             print(f"Warning: [{username}] No response toast detected. Checking for modal closure...")
              if not page.is_visible("#transactionPIN"):
-                 print(f"[{username}] Modal closed. Likely SUCCESS!")
+                 print(f"[{username}] Application submitted successfully (modal closed).")
              else:
-                 print(f"Error: [{username}] Modal still open. Application likely REJECTED.")
-                 # Final diagnostic: Check for any red text inside the modal
-                 modal_errors = page.locator(".modal-body .text-danger, .modal-body .alert").all_inner_texts()
-                 if modal_errors:
-                      print(f"[{username}] Modal Errors: {modal_errors}")
-                 page.screenshot(path=f"debug_apply_fail_{username}.png")
+                 print(f"Error: [{username}] Application submission failed (modal still open).")
     else:
         print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
 
 def get_accounts():
     """
     Retrieves accounts from environment variable (JSON) or local file.
-    Falls back to single .env account if no list is found.
     """
-    # 1. Check for ACCOUNTS_JSON env var (GitHub Secrets)
     accounts_env = os.getenv("ACCOUNTS_JSON")
     if accounts_env:
         try:
@@ -441,7 +393,6 @@ def get_accounts():
         except json.JSONDecodeError:
             print("Error: Error decoding ACCOUNTS_JSON environment variable.")
     
-    # 2. Check for local accounts.json file
     if os.path.exists("accounts.json"):
         try:
             with open("accounts.json", "r") as f:
@@ -449,7 +400,6 @@ def get_accounts():
         except json.JSONDecodeError:
             print("Error: Error decoding local accounts.json file.")
 
-    # 3. Fallback to single .env account
     if os.getenv("MEROSHARE_USER"):
         return [{
             "MEROSHARE_USER": os.getenv("MEROSHARE_USER"),
@@ -472,7 +422,7 @@ def run_automation():
     print(f"Found {len(accounts)} account(s) to process.")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True) # Default to headless for multi-account
+        browser = p.chromium.launch(headless=True)
         
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
@@ -480,15 +430,14 @@ def run_automation():
             print(f"Processing Account {i+1}/{len(accounts)}: {username}")
             print(f"=============================================")
 
-            context = browser.new_context()
-            page = context.new_page()
+            context = browser.new_page()
+            page = context
 
             try:
                 print("Opening MeroShare...")
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
 
-                # Retry Loop
-                MAX_RETRIES = 5
+                MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
                     if login(page, username, account['MEROSHARE_PASS'], account['DP_NAME']):
@@ -510,7 +459,6 @@ def run_automation():
                 print(f"Error: [{username}] Error processing account: {e}")
             finally:
                 page.close()
-                context.close()
         
         browser.close()
         print("\nAll accounts processed.")
