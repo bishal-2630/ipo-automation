@@ -197,40 +197,58 @@ def apply_ipo(page, account):
     
     print(f"Selecting Bank: {bank_name}...")
     try:
-        # Diagnostic list gave us the exact ID: #selectBank
         page.wait_for_selector("#selectBank", timeout=20000)
         
-        # NEW: Log all available options to find the correct label
+        # Log available options for debugging
         options = page.locator("#selectBank option").all_inner_texts()
-        print(f"[{username}] Available banks in dropdown: {options[:5]}... (Total: {len(options)})")
+        print(f"[{username}] Available banks: {[o.strip() for o in options[:5]]}...")
         
-        # Try exact match first
+        # Robust matching: strip whitespace and check
+        target_option = None
+        for opt in options:
+            if opt.strip() == bank_name.strip():
+                target_option = opt
+                break
+        
+        if target_option:
+            page.select_option("#selectBank", label=target_option)
+        else:
+            # Try partial match as fallback
+            print(f"[{username}] Exact match failed for '{bank_name}'. Trying partial match...")
+            for opt in options:
+                if bank_name.lower().strip() in opt.lower().strip():
+                    target_option = opt
+                    break
+            if target_option:
+                print(f"[{username}] Found partial match: '{target_option.strip()}'")
+                page.select_option("#selectBank", label=target_option)
+            else:
+                raise Exception(f"Bank '{bank_name}' not found in dropdown list. Options were: {[o.strip() for o in options]}")
+
+        page.wait_for_timeout(1500) # Wait for Branch to populate
+        
+        # Handle Branch selection
+        print(f"[{username}] Selecting Branch...")
         try:
-            page.select_option("#selectBank", label=bank_name)
+            page.wait_for_selector("#selectBranch option", timeout=5000)
+            branch_options = page.locator("#selectBranch option").all_inner_texts()
+            valid_branches = [b for b in branch_options if "choose" not in b.lower() and b.strip()]
+            
+            if valid_branches:
+                print(f"[{username}] Selecting branch: {valid_branches[0].strip()}")
+                page.select_option("#selectBranch", label=valid_branches[0])
+            else:
+                 print(f"[{username}] No branches found in dropdown, trying keyboard selection...")
+                 page.click("#selectBranch")
+                 page.keyboard.press("ArrowDown")
+                 page.keyboard.press("Enter")
         except:
-             # Try partial match if exact fails
-             print(f"[{username}] Exact match failed for '{bank_name}'. Trying partial match...")
-             found_label = None
-             for opt in options:
-                 if bank_name.lower() in opt.lower() or opt.lower() in bank_name.lower():
-                     found_label = opt
-                     break
-             if found_label:
-                 print(f"[{username}] Found partial match: '{found_label}'")
-                 page.select_option("#selectBank", label=found_label)
-             else:
-                 raise Exception(f"Bank '{bank_name}' not found in dropdown list.")
-                 
+            print(f"[{username}] Branch selection failed or not required. Proceeding...")
+
         page.wait_for_timeout(1000) 
         
     except Exception as e:
-        print(f"[{username}] Bank selection failed. Form diagnostics:")
-        # List elements for quick reference if it fails again
-        elements = page.query_selector_all("input, select, button")
-        for el in elements:
-            try:
-                print(f"  - {el.evaluate('node => node.tagName')}: id={el.get_attribute('id')}, name={el.get_attribute('name')}")
-            except: pass
+        print(f"[{username}] Bank/Branch selection failed. Diagnostics:")
         page.screenshot(path=f"debug_bank_fail_{username}.png")
         raise e
 
