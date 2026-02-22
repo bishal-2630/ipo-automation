@@ -89,19 +89,39 @@ def apply_ipo(page, account):
     print(f"📂 [{username}] Navigating to My ASBA...")
     page.wait_for_selector(".nav-link:has-text('My ASBA')")
     page.click(".nav-link:has-text('My ASBA')")
+    
+    # NEW: Move explicitly to 'Apply for Issue' tab
+    print(f"📂 [{username}] Clicking 'Apply for Issue' tab...")
+    try:
+        page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
+        page.click("a:has-text('Apply for Issue')")
+        page.wait_for_load_state('networkidle')
+    except Exception as e:
+        print(f"⚠️ [{username}] Could not find 'Apply for Issue' tab: {e}")
+        page.screenshot(path=f"debug_tab_fail_{username}.png")
 
     print(f"🔍 [{username}] Looking for available IPOs...")
     try:
-        page.wait_for_selector("button:has-text('Apply')", timeout=5000)
+        # Wait for either buttons or a 'No Data' message
+        page.wait_for_timeout(3000) 
+        
         apply_buttons = page.query_selector_all("button:has-text('Apply')")
-    except:
+        
+        # Diagnostic: Log what we see
+        issue_names = page.query_selector_all(".issue-name") # common class for IPO names in table
+        if issue_names:
+            print(f"📋 [{username}] Visible Issues: {[el.inner_text().strip() for el in issue_names]}")
+    except Exception as e:
+        print(f"⚠️ [{username}] Error scanning for buttons: {e}")
         apply_buttons = []
 
     if not apply_buttons:
-        print(f"❌ [{username}] No available IPOs found. Skipping.")
+        print(f"❌ [{username}] No available IPOs found. (Check debug_asba_{username}.png script captured)")
+        page.screenshot(path=f"debug_asba_{username}.png")
         return
 
     print(f"✅ [{username}] Found {len(apply_buttons)} IPO(s). Applying for the first one...")
+    apply_buttons[0].scroll_into_view_if_needed()
     apply_buttons[0].click()
 
     print(f"📝 [{username}] Filling application form...")
