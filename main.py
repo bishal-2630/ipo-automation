@@ -15,7 +15,7 @@ if os.name == 'nt':
     if os.path.exists(TESSERACT_PATH):
         pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
     else:
-        print(f"⚠️ Warning: Tesseract not found at {TESSERACT_PATH}. Assuming it's in PATH.")
+        print(f"Warning: Tesseract not found at {TESSERACT_PATH}. Assuming it's in PATH.")
 
 def solve_captcha(page):
     """
@@ -24,7 +24,7 @@ def solve_captcha(page):
     try:
         captcha_elem = page.wait_for_selector(".captcha-image", timeout=5000)
         if not captcha_elem:
-            print("⚠️ CAPTCHA image not found!")
+            print("Warning: CAPTCHA image not found!")
             return None
         
         captcha_path = "captcha.png"
@@ -34,19 +34,19 @@ def solve_captcha(page):
         captcha_text = pytesseract.image_to_string(image, config='--psm 8').strip()
         captcha_text = "".join(filter(str.isalnum, captcha_text))
         
-        print(f"🤖 OCR Read: '{captcha_text}'")
+        print(f"OCR Read: '{captcha_text}'")
         return captcha_text
     except Exception as e:
-        print(f"❌ OCR Error: {e}")
+        print(f"Error: OCR Error: {e}")
         return None
 
 def login(page, username, password, dp_name):
     """
     Attempts to login a specific user.
     """
-    print(f"🔑 Logging in as {username}...")
+    print(f"Logging in as {username}...")
     
-    print(f"🏢 Selecting DP: {dp_name}...")
+    print(f"Selecting DP: {dp_name}...")
     page.wait_for_selector("#selectBranch")
     page.click("#selectBranch")
     page.wait_for_timeout(1000) # Wait for dropdown to open
@@ -59,7 +59,7 @@ def login(page, username, password, dp_name):
         page.wait_for_selector("#txtUserName", timeout=10000)
         page.fill("#txtUserName", username)
     except Exception as e:
-        print(f"❌ [{username}] Username field not found after DP selection: {e}")
+        print(f"[{username}] Username field not found after DP selection: {e}")
         page.screenshot(path=f"debug_login_dp_{username}.png")
         raise e
     page.fill("#txtPassword", password)
@@ -86,7 +86,7 @@ def login(page, username, password, dp_name):
                  return True
              return False
     except Exception as e:
-        print(f"⚠️ Login Check Error: {e}")
+        print(f"Warning: Login Check Error: {e}")
         return False
 
 def apply_ipo(page, account):
@@ -99,21 +99,21 @@ def apply_ipo(page, account):
     bank_name = account['BANK_NAME']
     kitta = account.get('KITTA', '10')
 
-    print(f"📂 [{username}] Navigating to My ASBA...")
+    print(f"[{username}] Navigating to My ASBA...")
     page.wait_for_selector(".nav-link:has-text('My ASBA')")
     page.click(".nav-link:has-text('My ASBA')")
     
     # NEW: Move explicitly to 'Apply for Issue' tab
-    print(f"📂 [{username}] Clicking 'Apply for Issue' tab...")
+    print(f"[{username}] Clicking 'Apply for Issue' tab...")
     try:
         page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
         page.click("a:has-text('Apply for Issue')")
         page.wait_for_load_state('networkidle')
     except Exception as e:
-        print(f"⚠️ [{username}] Could not find 'Apply for Issue' tab: {e}")
+        print(f"Warning: [{username}] Could not find 'Apply for Issue' tab: {e}")
         page.screenshot(path=f"debug_tab_fail_{username}.png")
 
-    print(f"🔍 [{username}] Looking for available IPOs...")
+    print(f"[{username}] Looking for available IPOs...")
     try:
         # Wait for either buttons or a 'No Data' message
         page.wait_for_timeout(3000) 
@@ -123,22 +123,22 @@ def apply_ipo(page, account):
         # Diagnostic: Log what we see
         issue_names = page.query_selector_all(".issue-name") # common class for IPO names in table
         if issue_names:
-            print(f"📋 [{username}] Visible Issues: {[el.inner_text().strip() for el in issue_names]}")
+            print(f"Visible Issues: {[el.inner_text().strip() for el in issue_names]}")
     except Exception as e:
-        print(f"⚠️ [{username}] Error scanning for buttons: {e}")
+        print(f"Warning: [{username}] Error scanning for buttons: {e}")
         apply_buttons = []
 
     if not apply_buttons:
-        print(f"❌ [{username}] No available IPOs found. (Check debug_asba_{username}.png script captured)")
+        print(f"Error: [{username}] No available IPOs found. (Check debug_asba_{username}.png script captured)")
         page.screenshot(path=f"debug_asba_{username}.png")
         return
 
-    print(f"✅ [{username}] Found {len(apply_buttons)} IPO(s). Applying for the first one...")
+    print(f"Found {len(apply_buttons)} IPO(s). Applying for the first one...")
     apply_buttons[0].scroll_into_view_if_needed()
     apply_buttons[0].click()
 
-    print(f"📝 [{username}] Filling application form...")
-    print(f"🏦 Selecting Bank: {bank_name}...")
+    print(f"[{username}] Filling application form...")
+    print(f"Selecting Bank: {bank_name}...")
     page.wait_for_selector("select[name='bank']")
     page.click("select[name='bank']")
     page.wait_for_timeout(1000) # Wait for dropdown to open
@@ -149,26 +149,26 @@ def apply_ipo(page, account):
     page.fill("input[name='appliedKitta']", kitta)
     page.fill("input[name='crnNumber']", crn)
     page.check("input[type='checkbox']")
-    print(f"✅ [{username}] Form filled.")
+    print(f"Form filled.")
 
     page.click("button:has-text('Proceed')")
 
     if tpin:
-        print(f"🔢 [{username}] Entering TPIN...")
+        print(f"[{username}] Entering TPIN...")
         page.wait_for_selector("input[name='confirmationCode']")
         page.fill("input[name='confirmationCode']", tpin)
         
         page.wait_for_timeout(1000)
-        print(f"🚀 [{username}] Submitting application...")
+        print(f"[{username}] Submitting application...")
         page.click("button:has-text('Apply')")
         
         try:
             page.wait_for_selector(".toast-success", timeout=5000)
-            print(f"✅ [{username}] Application SUCCESS!")
+            print(f"Application SUCCESS!")
         except:
-             print(f"⚠️ [{username}] Success message not detected, but submitted.")
+             print(f"Warning: [{username}] Success message not detected, but submitted.")
     else:
-        print(f"⚠️ [{username}] No TPIN provided. Skipping submission.")
+        print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
 
 def get_accounts():
     """
@@ -181,7 +181,7 @@ def get_accounts():
         try:
             return json.loads(accounts_env)
         except json.JSONDecodeError:
-            print("❌ Error decoding ACCOUNTS_JSON environment variable.")
+            print("Error: Error decoding ACCOUNTS_JSON environment variable.")
     
     # 2. Check for local accounts.json file
     if os.path.exists("accounts.json"):
@@ -189,7 +189,7 @@ def get_accounts():
             with open("accounts.json", "r") as f:
                 return json.load(f)
         except json.JSONDecodeError:
-            print("❌ Error decoding local accounts.json file.")
+            print("Error: Error decoding local accounts.json file.")
 
     # 3. Fallback to single .env account
     if os.getenv("MEROSHARE_USER"):
@@ -208,10 +208,10 @@ def get_accounts():
 def run_automation():
     accounts = get_accounts()
     if not accounts:
-        print("❌ No accounts found. Check accounts.json, ACCOUNTS_JSON secret, or .env file.")
+        print("Error: No accounts found. Check accounts.json, ACCOUNTS_JSON secret, or .env file.")
         return
 
-    print(f"👥 Found {len(accounts)} account(s) to process.")
+    print(f"Found {len(accounts)} account(s) to process.")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True) # Default to headless for multi-account
@@ -219,14 +219,14 @@ def run_automation():
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
             print(f"\n=============================================")
-            print(f"▶️ Processing Account {i+1}/{len(accounts)}: {username}")
+            print(f"Processing Account {i+1}/{len(accounts)}: {username}")
             print(f"=============================================")
 
             context = browser.new_context()
             page = context.new_page()
 
             try:
-                print("🚀 Opening MeroShare...")
+                print("Opening MeroShare...")
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
 
                 # Retry Loop
@@ -234,11 +234,11 @@ def run_automation():
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
                     if login(page, username, account['MEROSHARE_PASS'], account['DP_NAME']):
-                        print(f"✅ [{username}] Login Successful!")
+                        print(f"Login Successful!")
                         logged_in = True
                         break
                     else:
-                        print(f"❌ [{username}] Login failed (Attempt {attempt}). Retrying...")
+                        print(f"Error: [{username}] Login failed (Attempt {attempt}). Retrying...")
                         page.reload()
                         page.wait_for_load_state('networkidle')
                         time.sleep(2)
@@ -246,16 +246,16 @@ def run_automation():
                 if logged_in:
                     apply_ipo(page, account)
                 else:
-                    print(f"❌ [{username}] Failed to login after {MAX_RETRIES} attempts.")
+                    print(f"Error: [{username}] Failed to login after {MAX_RETRIES} attempts.")
 
             except Exception as e:
-                print(f"❌ [{username}] Error processing account: {e}")
+                print(f"Error: [{username}] Error processing account: {e}")
             finally:
                 page.close()
                 context.close()
         
         browser.close()
-        print("\n🏁 All accounts processed.")
+        print("\nAll accounts processed.")
 
 if __name__ == "__main__":
     run_automation()
