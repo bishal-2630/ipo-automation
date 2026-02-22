@@ -275,20 +275,42 @@ def apply_ipo(page, account):
         raise e
 
     # Use exact IDs from diagnostics for Kitta and CRN
-    for field, id_ in [("appliedKitta", "#appliedKitta"), ("crnNumber", "#crnNumber")]:
-        loc = page.locator(id_)
-        loc.clear()
-        loc.type(account.get('KITTA', '10') if field == 'appliedKitta' else account['CRN'])
-        loc.dispatch_event('input')
-        loc.dispatch_event('change')
-        page.wait_for_timeout(500)
+    print(f"[{username}] Filling Kitta and CRN with validation triggers...")
+    
+    # Kitta
+    kitta_loc = page.locator("#appliedKitta")
+    kitta_loc.clear()
+    kitta_loc.type(account.get('KITTA', '10'))
+    page.keyboard.press("Tab") # Trigger calculation
+    page.wait_for_timeout(500)
+    
+    # CRN
+    crn_loc = page.locator("#crnNumber")
+    crn_loc.clear()
+    crn_loc.type(account['CRN'])
+    page.keyboard.press("Tab") # Trigger potential field-level validation
+    page.wait_for_timeout(500)
+
+    # NEW: Wait for Amount to populate (it should be non-empty and non-zero)
+    print(f"[{username}] Waiting for amount calculation...")
+    try:
+        # Give it a few seconds to calculate
+        page.wait_for_function("document.querySelector('#amount') && document.querySelector('#amount').value !== '' && document.querySelector('#amount').value !== '0'", timeout=5000)
+        amount = page.locator("#amount").input_value()
+        print(f"[{username}] Calculated Amount: {amount}")
+    except:
+        print(f"Warning: [{username}] Amount was not calculated. Form might be invalid.")
+        # Check for visible error messages
+        errors = page.locator(".text-danger").all_inner_texts()
+        if errors:
+            print(f"[{username}] Form Errors Found: {errors}")
     
     # Checkbox jiggle (ID is disclaimer)
     page.uncheck("#disclaimer")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(300)
     page.check("#disclaimer")
-    page.dispatch_event("#disclaimer", 'change')
     
+    # Final click to blur everything
     page.mouse.click(0, 0)
     page.wait_for_timeout(1000)
     
@@ -297,9 +319,17 @@ def apply_ipo(page, account):
     is_disabled = proceed_btn.evaluate("node => node.disabled")
     
     if is_disabled:
-        print(f"Warning: Proceed button is still DISABLED. Forcing it to enable...")
-        page.evaluate("() => { Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Proceed')).disabled = false; }")
+        print(f"Warning: Proceed button is still DISABLED. Form diagnostics:")
+        # One last attempt: click Kitta and press Enter
+        page.click("#appliedKitta")
+        page.keyboard.press("Enter")
         page.wait_for_timeout(500)
+        is_disabled = proceed_btn.evaluate("node => node.disabled")
+        
+        if is_disabled:
+            print(f"Forcing Proceed button to enable as last resort...")
+            page.evaluate("() => { Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Proceed')).disabled = false; }")
+            page.wait_for_timeout(500)
 
     proceed_btn.click(force=True)
 
