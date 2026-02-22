@@ -3,49 +3,9 @@ from dotenv import load_dotenv
 import os
 import time
 import json
-import pytesseract
-from PIL import Image
 
 # Load environment variables
 load_dotenv()
-
-# --- TESSERACT CONFIGURATION ---
-if os.name == 'nt':
-    TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    if os.path.exists(TESSERACT_PATH):
-        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-    else:
-        print(f"Warning: Tesseract not found at {TESSERACT_PATH}. Assuming it's in PATH.")
-
-def solve_captcha(page):
-    """
-    Locates the CAPTCHA image, takes a screenshot, and uses Tesseract to read it.
-    """
-    try:
-        # Increase timeout and add diagnostic screenshot
-        try:
-            captcha_elem = page.wait_for_selector(".captcha-image", timeout=15000)
-        except Exception as e:
-            print(f"Error: CAPTCHA not visible after 15s. Capturing state...")
-            page.screenshot(path="debug_captcha_missing.png")
-            raise e
-
-        if not captcha_elem:
-            print("Warning: CAPTCHA image element not found!")
-            return None
-        
-        captcha_path = "captcha.png"
-        captcha_elem.screenshot(path=captcha_path)
-        
-        image = Image.open(captcha_path).convert('L')
-        captcha_text = pytesseract.image_to_string(image, config='--psm 8').strip()
-        captcha_text = "".join(filter(str.isalnum, captcha_text))
-        
-        print(f"OCR Read: '{captcha_text}'")
-        return captcha_text
-    except Exception as e:
-        print(f"Error: OCR Error: {e}")
-        return None
 
 def login(page, username, password, dp_name):
     """
@@ -111,16 +71,8 @@ def login(page, username, password, dp_name):
         page.screenshot(path=f"debug_login_form_{username}.png")
         raise e
     
-    # Check if CAPTCHA is actually required/visible
-    is_captcha_required = page.locator(".captcha-image").is_visible()
-    
-    if is_captcha_required:
-        captcha_text = solve_captcha(page)
-        if not captcha_text:
-            return False
-        page.fill("#captchaEnter", captcha_text)
-    else:
-        print(f"[{username}] No CAPTCHA required or visible. Proceeding...")
+    # Note: CAPTCHA logic removed as per user request
+    pass
 
     page.click("button:has-text('Login')")
     
