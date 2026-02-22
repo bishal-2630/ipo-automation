@@ -111,11 +111,17 @@ def login(page, username, password, dp_name):
         page.screenshot(path=f"debug_login_form_{username}.png")
         raise e
     
-    captcha_text = solve_captcha(page)
-    if not captcha_text:
-        return False
-        
-    page.fill("#captchaEnter", captcha_text)
+    # Check if CAPTCHA is actually required/visible
+    is_captcha_required = page.locator(".captcha-image").is_visible()
+    
+    if is_captcha_required:
+        captcha_text = solve_captcha(page)
+        if not captcha_text:
+            return False
+        page.fill("#captchaEnter", captcha_text)
+    else:
+        print(f"[{username}] No CAPTCHA required or visible. Proceeding...")
+
     page.click("button:has-text('Login')")
     
     try:
