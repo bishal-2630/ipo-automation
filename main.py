@@ -219,41 +219,59 @@ def apply_ipo(page, account):
         """, bank_name)
         
         if "FAIL" in selected_bank:
-             raise Exception(f"Bank selection failed: {{selected_bank}}")
-        print(f"[{{username}}] Selected Bank: {{selected_bank}}")
+             raise Exception(f"Bank selection failed: {selected_bank}")
+        print(f"[{username}] Selected Bank: {selected_bank}")
         
         page.wait_for_timeout(1500) # Wait for Branch to populate
         
-        # BRUTE FORCE BRANCH SELECTION: Picks the first valid branch
-        print(f"[{{username}}] Selecting Branch...")
+        # BRUTE FORCE BRANCH SELECTION: Handles both SELECT and INPUT types
+        print(f"[{username}] Selecting Branch...")
         selected_branch = page.evaluate("""
             () => {
-                const select = document.querySelector('#selectBranch');
-                if (!select) return "NOT_FOUND";
-                const options = Array.from(select.options);
-                // Filter out 'Please choose one' and empty options
-                const validOptions = options.filter(o => !o.innerText.toLowerCase().includes('choose') && o.innerText.trim() !== '');
-                if (validOptions.length > 0) {
-                    const match = validOptions[0];
-                    select.value = match.value;
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                    select.dispatchEvent(new Event('input', { bubbles: true }));
-                    return match.innerText.trim();
+                const el = document.querySelector('#selectBranch');
+                if (!el) return "NOT_FOUND";
+                
+                // If it's a standard SELECT
+                if (el.tagName === 'SELECT') {
+                    const options = Array.from(el.options);
+                    const validOptions = options.filter(o => !o.innerText.toLowerCase().includes('choose') && o.innerText.trim() !== '');
+                    if (validOptions.length > 0) {
+                        el.value = validOptions[0].value;
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        return "SELECT: " + validOptions[0].innerText.trim();
+                    }
+                    return "SELECT: NONE_FOUND";
                 }
-                return "NONE_FOUND";
+                
+                // If it's an INPUT (likely an autocomplete or facade)
+                if (el.tagName === 'INPUT') {
+                    // We'll return a signal to handle it via Playwright keyboard
+                    return "INPUT_FIELD";
+                }
+                
+                return "UNKNOWN_TAG: " + el.tagName;
             }
         """)
         
-        if selected_branch in ["NOT_FOUND", "NONE_FOUND"]:
-             print(f"[{{username}}] Branch selection auto-skipped: {{selected_branch}}")
+        if selected_branch == "INPUT_FIELD":
+             # Handle input-based branch selection via keyboard
+             page.click("#selectBranch")
+             page.wait_for_timeout(500)
+             page.keyboard.press("ArrowDown")
+             page.wait_for_timeout(500)
+             page.keyboard.press("Enter")
+             print(f"[{username}] Selected Branch via keyboard interaction")
+        elif "NOT_FOUND" in selected_branch or "NONE_FOUND" in selected_branch:
+             print(f"[{username}] Branch selection auto-skipped: {selected_branch}")
         else:
-             print(f"[{{username}}] Selected Branch: {{selected_branch}}")
+             print(f"[{username}] {selected_branch}")
 
         page.wait_for_timeout(1000) 
         
     except Exception as e:
-        print(f"[{{username}}] Bank/Branch selection failed. Diagnostics:")
-        page.screenshot(path=f"debug_bank_fail_{{username}}.png")
+        print(f"[{username}] Bank/Branch selection failed. Diagnostics:")
+        page.screenshot(path=f"debug_bank_fail_{username}.png")
         raise e
 
     # Use exact IDs from diagnostics for Kitta and CRN
