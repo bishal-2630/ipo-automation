@@ -191,14 +191,46 @@ def apply_ipo(page, account):
     apply_buttons[0].click()
 
     print(f"[{username}] Filling application form...")
+    
+    # Wait for the form to actually be visible
+    page.wait_for_timeout(2000) 
+    
     print(f"Selecting Bank: {bank_name}...")
-    page.wait_for_selector("[name='bank']")
-    page.click("select[name='bank']")
-    page.wait_for_timeout(1000) # Wait for dropdown to open
-    page.keyboard.type(bank_name)
-    page.wait_for_timeout(1000) # Wait for search results
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(1000) # Wait for dropdown to close
+    try:
+        # Try multiple ways to find the bank dropdown
+        bank_selectors = ["select[name='bank']", "[name='bank']", "select", ".select2-container"]
+        bank_found = False
+        for selector in bank_selectors:
+            if page.locator(selector).is_visible():
+                page.click(selector)
+                bank_found = True
+                break
+        
+        if not bank_found:
+            # Fallback for wait
+            page.wait_for_selector("[name='bank']", timeout=15000)
+            page.click("[name='bank']")
+            
+        page.wait_for_timeout(1000) 
+        page.keyboard.type(bank_name)
+        page.wait_for_timeout(1000) 
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(1000) 
+
+    except Exception as e:
+        print(f"[{username}] Could not find bank selector. Form state:")
+        # Diagnostic: List all inputs and selects
+        elements = page.query_selector_all("input, select")
+        elem_info = []
+        for el in elements:
+            e_id = el.get_attribute("id")
+            e_name = el.get_attribute("name")
+            e_tag = el.evaluate("node => node.tagName")
+            elem_info.append(f"{e_tag}: id={e_id}, name={e_name}")
+        print(f"Found {len(elements)} elements: {elem_info}")
+        page.screenshot(path=f"debug_bank_fail_{username}.png")
+        raise e
+
     page.fill("input[name='appliedKitta']", kitta)
     page.fill("input[name='crnNumber']", crn)
     page.check("input[type='checkbox']")
