@@ -139,7 +139,7 @@ def apply_ipo(page, account):
 
     print(f"[{username}] Filling application form...")
     print(f"Selecting Bank: {bank_name}...")
-    page.wait_for_selector("select[name='bank']")
+    page.wait_for_selector("[name='bank']")
     page.click("select[name='bank']")
     page.wait_for_timeout(1000) # Wait for dropdown to open
     page.keyboard.type(bank_name)
