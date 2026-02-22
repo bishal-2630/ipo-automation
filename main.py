@@ -199,7 +199,28 @@ def apply_ipo(page, account):
     try:
         # Diagnostic list gave us the exact ID: #selectBank
         page.wait_for_selector("#selectBank", timeout=20000)
-        page.select_option("#selectBank", label=bank_name)
+        
+        # NEW: Log all available options to find the correct label
+        options = page.locator("#selectBank option").all_inner_texts()
+        print(f"[{username}] Available banks in dropdown: {options[:5]}... (Total: {len(options)})")
+        
+        # Try exact match first
+        try:
+            page.select_option("#selectBank", label=bank_name)
+        except:
+             # Try partial match if exact fails
+             print(f"[{username}] Exact match failed for '{bank_name}'. Trying partial match...")
+             found_label = None
+             for opt in options:
+                 if bank_name.lower() in opt.lower() or opt.lower() in bank_name.lower():
+                     found_label = opt
+                     break
+             if found_label:
+                 print(f"[{username}] Found partial match: '{found_label}'")
+                 page.select_option("#selectBank", label=found_label)
+             else:
+                 raise Exception(f"Bank '{bank_name}' not found in dropdown list.")
+                 
         page.wait_for_timeout(1000) 
         
     except Exception as e:
