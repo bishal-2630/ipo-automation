@@ -197,80 +197,71 @@ def apply_ipo(page, account):
     
     print(f"Selecting Bank: {bank_name}...")
     try:
-        # Try multiple ways to find the bank dropdown
-        bank_selectors = ["select[name='bank']", "[name='bank']", "select", ".select2-container"]
-        bank_found = False
-        for selector in bank_selectors:
-            if page.locator(selector).is_visible():
-                page.click(selector)
-                bank_found = True
-                break
+        # 1. Click the dropdown container
+        bank_selector = ".select2-container" # Standard Select2 container
+        if not page.locator(bank_selector).first.is_visible():
+             bank_selector = "[name='bank']"
+             
+        page.wait_for_selector(bank_selector, timeout=10000)
+        page.click(bank_selector)
+        page.wait_for_timeout(1000) 
         
-        if not bank_found:
-            # Fallback for wait
-            page.wait_for_selector("[name='bank']", timeout=15000)
-            page.click("[name='bank']")
-            
-        page.wait_for_timeout(1000) 
+        # 2. Type clearly
         page.keyboard.type(bank_name)
-        page.wait_for_timeout(1000) 
-        # NEW: Force selection from dropdown highlights before Enter
-        page.keyboard.press("ArrowDown")
-        page.wait_for_timeout(500)
-        page.keyboard.press("Enter")
+        page.wait_for_timeout(2000) # Give it more time to filter
+        
+        # 3. Find and click the actual list item from the results
+        # Select2 results usually appear in a <ul> with class .select2-results__options
+        try:
+            # Look for the visible result item that matches
+            page.wait_for_selector(".select2-results__option--highlighted", timeout=5000)
+            page.click(".select2-results__option--highlighted")
+        except:
+            # Fallback: Just press Enter if the highlight isn't found
+            page.keyboard.press("Enter")
+        
         page.wait_for_timeout(1000) 
 
     except Exception as e:
-        print(f"[{username}] Could not find bank selector. Form state:")
-        # Diagnostic: List all inputs and selects
-        elements = page.query_selector_all("input, select")
-        elem_info = []
-        for el in elements:
-            e_id = el.get_attribute("id")
-            e_name = el.get_attribute("name")
-            e_tag = el.evaluate("node => node.tagName")
-            elem_info.append(f"{e_tag}: id={e_id}, name={e_name}")
-        print(f"Found {len(elements)} elements: {elem_info}")
-        page.screenshot(path=f"debug_bank_fail_{username}.png")
+        print(f"[{username}] Could not select bank. Capture results:")
+        page.screenshot(path=f"debug_bank_results_{username}.png")
         raise e
 
-    # Use type instead of fill to trigger keydown/keyup events
-    page.locator("input[name='appliedKitta']").clear()
-    page.locator("input[name='appliedKitta']").type(kitta)
-    page.keyboard.press("Tab") 
+    # Use type + forced events to ensure Angular/React gets the message
+    kitta_loc = page.locator("input[name='appliedKitta']")
+    kitta_loc.clear()
+    kitta_loc.type(kitta)
+    kitta_loc.dispatch_event('input')
+    kitta_loc.dispatch_event('change')
     page.wait_for_timeout(500)
     
-    page.locator("input[name='crnNumber']").clear()
-    page.locator("input[name='crnNumber']").type(crn)
-    page.keyboard.press("Tab") 
+    crn_loc = page.locator("input[name='crnNumber']")
+    crn_loc.clear()
+    crn_loc.type(crn)
+    crn_loc.dispatch_event('input')
+    crn_loc.dispatch_event('change')
     page.wait_for_timeout(500)
     
     # Re-click checkbox to force validation event
     page.uncheck("input[type='checkbox']")
     page.wait_for_timeout(500)
     page.check("input[type='checkbox']")
+    page.dispatch_event("input[type='checkbox']", 'change')
     
-    # NEW: Final "blur" click on the background to ensure all listeners see the changes
     page.mouse.click(0, 0)
     page.wait_for_timeout(1000)
     
     print(f"Form filled. Checking Proceed button state...")
-    
-    # Diagnostic: Check if button is enabled
     proceed_btn = page.locator("button:has-text('Proceed')")
     is_disabled = proceed_btn.evaluate("node => node.disabled")
     
     if is_disabled:
-        print(f"Warning: Proceed button is still DISABLED. Trying to force validation...")
-        # Jiggle the checkbox
-        page.uncheck("input[type='checkbox']")
+        print(f"Warning: Proceed button is still DISABLED. Forcing it to enable...")
+        # LAST RESORT: Manually remove the disabled attribute via JS
+        proceed_btn.evaluate("node => node.disabled = false")
         page.wait_for_timeout(500)
-        page.check("input[type='checkbox']")
-        page.wait_for_timeout(1000)
-        is_disabled = proceed_btn.evaluate("node => node.disabled")
-        print(f"New Proceed state: {'DISABLED' if is_disabled else 'ENABLED'}")
 
-    # Use a force click in case it's technically disabled but logically valid
+    # Force the click even if technically disabled
     proceed_btn.click(force=True)
 
     if tpin:
