@@ -47,19 +47,38 @@ def login(page, username, password, dp_name):
     print(f"Logging in as {username}...")
     
     print(f"Selecting DP: {dp_name}...")
-    page.wait_for_selector("#selectBranch")
+    page.wait_for_selector("#selectBranch", timeout=10000)
     page.click("#selectBranch")
-    page.wait_for_timeout(1000) # Wait for dropdown to open
+    page.wait_for_timeout(1000) 
     page.keyboard.type(dp_name)
-    page.wait_for_timeout(1000) # Wait for search results
+    page.wait_for_timeout(1000) 
     page.keyboard.press("Enter")
-    page.wait_for_timeout(1000) # Wait for dropdown to close
+    page.wait_for_timeout(1000) 
     
+    # NEW: Try to blur the dropdown to ensure fields are interactable
+    page.mouse.click(0, 0) 
+    page.wait_for_timeout(500)
+
     try:
-        page.wait_for_selector("#txtUserName", timeout=10000)
-        page.fill("#txtUserName", username)
+        # Use a more flexible selector for username (ID, Name, or Placeholder)
+        username_selectors = ["#txtUserName", "input[name='username']", "input[placeholder='Username']"]
+        found = False
+        for selector in username_selectors:
+            if page.locator(selector).is_visible():
+                page.fill(selector, username)
+                found = True
+                break
+        
+        if not found:
+            # If none found immediately, wait longer for the primary one
+            page.wait_for_selector("#txtUserName", timeout=20000)
+            page.fill("#txtUserName", username)
+            
     except Exception as e:
-        print(f"[{username}] Username field not found after DP selection: {e}")
+        print(f"[{username}] Could not find username field. State at failure:")
+        # Diagnostic: List all inputs found on the page
+        inputs = page.query_selector_all("input")
+        print(f"Found {len(inputs)} inputs: {[f'id={el.get_attribute('id')}, name={el.get_attribute('name')}' for el in inputs]}")
         page.screenshot(path=f"debug_login_dp_{username}.png")
         raise e
     page.fill("#txtPassword", password)
