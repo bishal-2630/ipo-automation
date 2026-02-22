@@ -197,71 +197,36 @@ def apply_ipo(page, account):
     
     print(f"Selecting Bank: {bank_name}...")
     try:
-        # 1. Broad wait for any select or bank-related element
-        # We try to wait for existence (attached) rather than visibility first
-        page.wait_for_selector("select, .select2-container, text=Bank", timeout=20000, state="attached")
-        
-        found_selector = None
-        # Try preferred selectors first
-        for sel in ["[name='bank']", "select", ".select2-container"]:
-            loc = page.locator(sel).first
-            if loc.is_visible():
-                found_selector = sel
-                break
-        
-        if found_selector:
-            page.click(found_selector)
-        else:
-            # Fallback: find by label
-            print(f"[{username}] Preferred selectors not visible, trying text search...")
-            page.click("text=Select Bank", timeout=5000)
-            
+        # Diagnostic list gave us the exact ID: #selectBank
+        page.wait_for_selector("#selectBank", timeout=20000)
+        page.select_option("#selectBank", label=bank_name)
         page.wait_for_timeout(1000) 
-        page.keyboard.type(bank_name)
-        page.wait_for_timeout(2000) 
         
-        # Try to click highlighting or just Enter
-        if page.locator(".select2-results__option--highlighted").is_visible():
-            page.click(".select2-results__option--highlighted")
-        else:
-            page.keyboard.press("Enter")
-            
-        page.wait_for_timeout(1000) 
-
     except Exception as e:
-        print(f"[{username}] Bank selection failed. DIAGNOSTICS:")
-        # Diagnostic: List all frames
-        print(f"Frames found: {[f.name or f.url for f in page.frames]}")
-        # Diagnostic: List all inputs/selects on the page
-        elements = page.query_selector_all("input, select, button, .select2-container")
-        print(f"Found {len(elements)} relevant elements:")
+        print(f"[{username}] Bank selection failed. Form diagnostics:")
+        # List elements for quick reference if it fails again
+        elements = page.query_selector_all("input, select, button")
         for el in elements:
             try:
-                tag = el.evaluate("node => node.tagName")
-                name = el.get_attribute("name") or "NO_NAME"
-                id_ = el.get_attribute("id") or "NO_ID"
-                text = el.inner_text().strip()[:30]
-                print(f"  - {tag}: id={id_}, name={name}, text='{text}'")
-            except:
-                pass
-        
+                print(f"  - {el.evaluate('node => node.tagName')}: id={el.get_attribute('id')}, name={el.get_attribute('name')}")
+            except: pass
         page.screenshot(path=f"debug_bank_fail_{username}.png")
         raise e
 
-    # Trigger validation for numeric fields
-    for field in ["appliedKitta", "crnNumber"]:
-        loc = page.locator(f"input[name='{field}']")
+    # Use exact IDs from diagnostics for Kitta and CRN
+    for field, id_ in [("appliedKitta", "#appliedKitta"), ("crnNumber", "#crnNumber")]:
+        loc = page.locator(id_)
         loc.clear()
         loc.type(account.get('KITTA', '10') if field == 'appliedKitta' else account['CRN'])
         loc.dispatch_event('input')
         loc.dispatch_event('change')
         page.wait_for_timeout(500)
     
-    # Checkbox jiggle
-    page.uncheck("input[type='checkbox']")
+    # Checkbox jiggle (ID is disclaimer)
+    page.uncheck("#disclaimer")
     page.wait_for_timeout(500)
-    page.check("input[type='checkbox']")
-    page.dispatch_event("input[type='checkbox']", 'change')
+    page.check("#disclaimer")
+    page.dispatch_event("#disclaimer", 'change')
     
     page.mouse.click(0, 0)
     page.wait_for_timeout(1000)
@@ -272,7 +237,6 @@ def apply_ipo(page, account):
     
     if is_disabled:
         print(f"Warning: Proceed button is still DISABLED. Forcing it to enable...")
-        # Last resort: Force enable via JS
         page.evaluate("() => { Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Proceed')).disabled = false; }")
         page.wait_for_timeout(500)
 
@@ -280,11 +244,13 @@ def apply_ipo(page, account):
 
     if tpin:
         print(f"[{username}] Entering TPIN...")
-        page.wait_for_selector("input[name='confirmationCode']")
-        page.fill("input[name='confirmationCode']", tpin)
+        # Exact ID is #transactionPIN
+        page.wait_for_selector("#transactionPIN", timeout=10000)
+        page.fill("#transactionPIN", tpin)
         
         page.wait_for_timeout(1000)
         print(f"[{username}] Submitting application...")
+        # Confirming Apply button text
         page.click("button:has-text('Apply')")
         
         try:
