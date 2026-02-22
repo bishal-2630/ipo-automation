@@ -73,20 +73,36 @@ def login(page, username, password, dp_name):
             # If none found immediately, wait longer for the primary one
             page.wait_for_selector("#txtUserName", timeout=20000)
             page.fill("#txtUserName", username)
+        
+        # Small pause before password
+        page.wait_for_timeout(500)
+        
+        # Robust password selection
+        password_selectors = ["#txtPassword", "input[name='password']", "input[placeholder='Password']"]
+        p_found = False
+        for selector in password_selectors:
+            if page.locator(selector).is_visible():
+                page.fill(selector, password)
+                p_found = True
+                break
+        
+        if not p_found:
+            page.wait_for_selector("#txtPassword", timeout=10000)
+            page.fill("#txtPassword", password)
             
     except Exception as e:
-        print(f"[{username}] Could not find username field. State at failure:")
+        print(f"[{username}] Could not find form fields. State at failure:")
         # Diagnostic: List all inputs found on the page
         inputs = page.query_selector_all("input")
         input_info = []
         for el in inputs:
             i_id = el.get_attribute("id")
             i_name = el.get_attribute("name")
-            input_info.append(f"id={i_id}, name={i_name}")
+            i_type = el.get_attribute("type")
+            input_info.append(f"id={i_id}, name={i_name}, type={i_type}")
         print(f"Found {len(inputs)} inputs: {input_info}")
-        page.screenshot(path=f"debug_login_dp_{username}.png")
+        page.screenshot(path=f"debug_login_form_{username}.png")
         raise e
-    page.fill("#txtPassword", password)
     
     captcha_text = solve_captcha(page)
     if not captcha_text:
