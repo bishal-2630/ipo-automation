@@ -46,8 +46,11 @@ def login(page, username, password, dp_name):
     """
     print(f"🔑 Logging in as {username}...")
     
+    print(f"🏢 Selecting DP: {dp_name}...")
     page.wait_for_selector("#selectBranch")
-    page.select_option("#selectBranch", label=dp_name)
+    page.click("#selectBranch")
+    page.keyboard.type(dp_name)
+    page.keyboard.press("Enter")
     page.fill("#txtUserName", username)
     page.fill("#txtPassword", password)
     
@@ -125,8 +128,11 @@ def apply_ipo(page, account):
     apply_buttons[0].click()
 
     print(f"📝 [{username}] Filling application form...")
+    print(f"🏦 Selecting Bank: {bank_name}...")
     page.wait_for_selector("select[name='bank']")
-    page.select_option("select[name='bank']", label=bank_name)
+    page.click("select[name='bank']")
+    page.keyboard.type(bank_name)
+    page.keyboard.press("Enter")
     page.fill("input[name='appliedKitta']", kitta)
     page.fill("input[name='crnNumber']", crn)
     page.check("input[type='checkbox']")
