@@ -2,11 +2,13 @@ name: IPO Status Watchdog
 
 on:
   schedule:
-    # Check status every 12 hours:
-    # 6:00 AM NPT = 00:15 UTC
-    - cron: "15 0 * * *"
-    # 6:00 PM NPT = 12:15 UTC
-    - cron: "15 12 * * *"
+    # Apply runs at 11:30 AM NPT (05:45 UTC)
+    # Check 1: 7h later  → 6:30 PM NPT  = 12:45 UTC
+    - cron: "45 12 * * *"
+    # Check 2: 14h later → 1:30 AM NPT  = 19:45 UTC
+    - cron: "45 19 * * *"
+    # Check 3: 21h later → 8:30 AM NPT  = 02:45 UTC
+    - cron: "45 2 * * *"
   workflow_dispatch:
 
 jobs:
