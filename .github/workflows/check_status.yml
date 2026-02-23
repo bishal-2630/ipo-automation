@@ -55,8 +55,8 @@ jobs:
           
           x11vnc -display :99 -forever -nopw -bg -rfbport 5900
           
-          # noVNC setup
-          /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &
+          # noVNC setup using websockify directly (Ubuntu 24.04 path)
+          websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
           
           # Cloudflare Tunnel setup
           echo "----------------------------------------------------------------"
