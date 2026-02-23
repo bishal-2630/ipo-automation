@@ -556,32 +556,57 @@ def check_status(page, account):
         page.wait_for_load_state('networkidle')
         page.wait_for_timeout(3000)
 
+        # Pre-scrape the Report list to see what's actually there
+        available_reports = page.evaluate("""
+            () => {
+                const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item'));
+                return rows.map(r => r.innerText.replace(/\\n/g, ' ').trim()).filter(t => t.length > 10);
+            }
+        """)
+        
+        if available_reports:
+            print(f"[{username}] 📋 Currently in Application Report: {len(available_reports)} entries found.")
+        else:
+            print(f"[{username}] ⚠️ No rows found in Application Report table.")
+            page.screenshot(path=f"debug_empty_report_{username}.png")
+
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
                 # Find the 'Report' button for THIS specific target IPO
-                clicked = page.evaluate(f"""
+                # We'll try even more flexible matching
+                clicked_info = page.evaluate(f"""
                     (targetName) => {{
-                        const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item'));
-                        const searchName = targetName.toLowerCase().split(' ').slice(0, 3).join(' '); // Use first 3 words for matching
+                        const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card'));
+                        const targetLow = targetName.toLowerCase().trim();
+                        // Get first few words, but avoid small generic words
+                        const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
                         
                         for (const row of rows) {{
                             const rowText = row.innerText.toLowerCase();
-                            // Flexible match: row contains the clean name OR first 3 words
-                            if (rowText.includes(targetName.toLowerCase()) || rowText.includes(searchName)) {{
+                            
+                            // Check for full match or word-based intersection
+                            const hasFullMatch = rowText.includes(targetLow);
+                            const hasWordMatch = searchWords.length > 0 && searchWords.every(w => rowText.includes(w));
+                            
+                            if (hasFullMatch || hasWordMatch) {{
                                 const btn = Array.from(row.querySelectorAll('button, a')).find(el => el.innerText.includes('Report'));
                                 if (btn) {{
                                     btn.click();
-                                    return true;
+                                    return {{ success: true, row: rowText.substring(0, 100) }};
                                 }}
                             }}
                         }}
-                        return false;
+                        return {{ success: false, rowsFound: rows.length }};
                     }}
                 """, target_ipo)
 
-                if not clicked:
-                    print(f"[{username}] ⏳ {target_ipo} not found in application reports yet (maybe hasn't been applied).")
+                if not clicked_info.get('success'):
+                    print(f"[{username}] ⏳ {target_ipo} not found in application reports yet.")
+                    # If it's the first time it fails, maybe log what WE saw
+                    if available_reports:
+                        print(f"[{username}] Debug: Top 3 reports seen: {available_reports[:3]}")
+                    page.screenshot(path=f"debug_match_fail_{target_ipo.replace(' ', '_')}.png")
                     continue
 
                 page.wait_for_load_state('networkidle')
