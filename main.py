@@ -578,40 +578,23 @@ def check_status(page, account):
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Button-first matching: Find "Report" or "Edit" then check its container for the name
-                # Row-aware matching: Identify row boundaries first to avoid cross-clicks
+                # Identify and click 'Report' or 'Edit' for the specific IPO
                 clicked_info = page.evaluate(f"""
                     (targetName) => {{
                         const targetLow = targetName.toLowerCase().trim();
                         const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
                         
-                        // Find all clickable actions
-                        const allButtons = Array.from(document.querySelectorAll('button, a'))
-                                           .filter(el => {{
-                                               const text = el.innerText.trim().toLowerCase();
-                                               return text === 'report' || text === 'edit' || text.includes('view report');
-                                           }});
-                        // Look for common row containers: tr, div with certain patterns, or just blocks with buttons
+                        // Look for common row containers
                         const allRows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, div[class*="row"]'))
                                          .filter(el => el.querySelector('button, a'));
                         
-                        for (const btn of allButtons) {{
-                            let container = btn.parentElement;
-                            let depth = 0;
-                            while (container && depth < 6) {{
-                                const text = container.innerText.toLowerCase();
-                                const hasFull = text.includes(targetLow);
-                                const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
-                                
-                                if (hasFull || hasWords) {{
                         for (const row of allRows) {{
-                            // Ensure we only look at the most granular "row" that contains the name
                             const text = row.innerText.toLowerCase();
                             const hasFull = text.includes(targetLow);
                             const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
                             
                             if (hasFull || hasWords) {{
-                                // Find buttons STRICTLY inside this row
+                                // Find buttons inside this row
                                 const btn = Array.from(row.querySelectorAll('button, a'))
                                              .find(el => {{
                                                  const t = el.innerText.trim().toLowerCase();
@@ -619,76 +602,47 @@ def check_status(page, account):
                                              }});
                                 if (btn) {{
                                     btn.click();
-                                    return {{ success: true, btnText: btn.innerText.trim() }};
                                     return {{ success: true, mode: btn.innerText.trim() }};
                                 }}
-                                container = container.parentElement;
-                                depth++;
                             }}
                         }}
-                        
-                        // Debug info if not found
-                        const seenActions = allButtons.map(b => b.innerText.trim());
-                        return {{ success: false, buttonsFound: allButtons.length, actions: seenActions }};
                         return {{ success: false }};
                     }}
                 """, target_ipo)
 
                 if not clicked_info.get('success'):
-                    print(f"[{username}] ⏳ {target_ipo} not found (Actions seen on page: {', '.join(clicked_info.get('actions', []))}).")
-                    page.screenshot(path=f"debug_not_found_{target_ipo[:10].replace(' ', '_')}.png")
                     print(f"[{username}] ⏳ {target_ipo} not found or has no available action.")
                     continue
 
                 page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(3000)
-                page.wait_for_timeout(4000) # Give more time for detail content
+                page.wait_for_timeout(4000)
 
-                # Read status from the detail page (enhanced extraction)
-                # Read status from the detail page (even more robust extraction)
+                # Read status from the detail page (robust extraction)
                 detail_status = page.evaluate("""
                     () => {
-                        const allText = document.body.innerText.toLowerCase();
-                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, .label'));
                         const bodyText = document.body.innerText.toLowerCase();
                         const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div'));
                         
                         const findValue = (searchText) => {
-                            const label = labels.find(el => el.innerText.toLowerCase().trim().includes(searchText));
                             const label = labels.find(el => {
                                 const t = el.innerText.toLowerCase().trim();
                                 return t === searchText || t.startsWith(searchText + ':') || t.includes(searchText + ' ');
                             });
                             if (!label) return null;
                             
-                            let value = '';
-                            if (label.tagName === 'TD' && label.nextElementSibling) {
-                                value = label.nextElementSibling.innerText;
-                            } else if (label.parentElement.nextElementSibling) {
-                                value = label.parentElement.nextElementSibling.innerText;
-                            } else if (label.nextElementSibling) {
-                                value = label.nextElementSibling.innerText;
-                            } else if (label.parentElement.innerText.includes(':')) {
-                                value = label.parentElement.innerText.split(':')[1];
-                            // 1. Check if value is in the same text element (e.g., "Status: Verified")
-                            if (label.innerText.includes(':')) {
-                                const parts = label.innerText.split(':');
-                                if (parts[1] && parts[1].trim().length > 0) return parts[1].trim();
-                            }
-                            return value ? value.trim() : null;
-                            
-                            // 2. Check siblings
+                            // 1. Check siblings
                             if (label.nextElementSibling) return label.nextElementSibling.innerText.trim();
                             
-                            // 3. Check table structure
-                            if (label.tagName === 'TH' || label.tagName === 'TD') {
-                                let parent = label.parentElement;
-                                let index = Array.from(parent.children).indexOf(label);
-                                if (parent.nextElementSibling && parent.nextElementSibling.children[index]) {
-                                    return parent.nextElementSibling.children[index].innerText.trim();
-                                }
+                            // 2. Check parent's siblings (common in table layouts)
+                            if (label.parentElement && label.parentElement.nextElementSibling) {
+                                return label.parentElement.nextElementSibling.innerText.trim();
                             }
                             
+                            // 3. Check for colon in text
+                            if (label.innerText.includes(':')) {
+                                return label.innerText.split(':')[1].trim();
+                            }
+
                             return null;
                         };
                         
@@ -699,16 +653,12 @@ def check_status(page, account):
                             if (statusLine) break;
                         }
                         
-                        // Fallback: If no explicit label, check if "Verified" or "Rejected" is just floating in the text
                         if (!statusLine) {
                             if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
                             else if (bodyText.includes('rejected')) statusLine = 'rejected';
-                            else if (bodyText.includes('failed')) statusLine = 'failed';
                         }
 
                         return { 
-                            status: findValue('status') || (allText.includes('verified') ? 'verified' : null), 
-                            remark: findValue('remark') 
                             status: statusLine, 
                             remark: findValue('remark') || findValue('reason') 
                         };
