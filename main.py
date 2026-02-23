@@ -552,15 +552,28 @@ def check_status(page, account):
         print(f"[{username}] Monitoring status for: {', '.join(active_ipo_names)}")
 
         # Step 2: Switch to 'Application Report'
-        page.click("a:has-text('Application Report')")
+        report_link_selector = "a:has-text('Application Report')"
+        page.click(report_link_selector)
         
-        # Robust wait for the list to load
-        try:
-            page.wait_for_selector("button:has-text('Report'), a:has-text('Report')", timeout=20000)
-        except:
-            print(f"[{username}] ⚠️ 'Report' buttons didn't appear. Saving debug screenshot.")
-            page.screenshot(path=f"debug_timeout_report_{username}.png")
-            return
+        # Robust wait for the list to load - handle 'loading' spinner
+        print(f"[{username}] Waiting for Application Report to populate...")
+        
+        for attempt in range(2):
+            try:
+                # Wait for loading text/spinner to DISAPPEAR
+                page.wait_for_selector("text=loading", state="detached", timeout=10000)
+                # Then wait for actual buttons to appear
+                page.wait_for_selector("button:has-text('Report'), a:has-text('Report')", timeout=15000)
+                break
+            except:
+                if attempt == 0:
+                    print(f"[{username}] ⏳ Report list still loading or empty. Proactively re-clicking...")
+                    page.click(report_link_selector)
+                    page.wait_for_timeout(3000)
+                else:
+                    print(f"[{username}] ⚠️ 'Report' buttons didn't appear after retry. Saving debug screenshot.")
+                    page.screenshot(path=f"debug_timeout_report_{username}.png")
+                    return
 
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
