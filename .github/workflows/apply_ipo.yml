@@ -63,7 +63,7 @@ jobs:
           sleep 5
           CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cloudflare.log | head -n 1)
           echo "----------------------------------------------------------------"
-          echo "VISUAL DEBUG LINK: $CF_URL"
+          echo "VISUAL DEBUG LINK: $CF_URL/vnc.html"
           echo "----------------------------------------------------------------"
           echo "GUI Environment started on DISPLAY :99"
 
