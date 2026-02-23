@@ -510,60 +510,54 @@ def get_accounts():
 
 def check_status(page, account):
     """
-    Robustly checks all reports in 'Application Report' by clicking each 'Report' button.
-    Identifies IPOs by name to ensure consistent iteration even if the list order shifts.
+    Refined Status Watchdog:
+    1. Scrapes available IPO names from 'Apply for Issue'.
+    2. Only checks the status for those specific names in 'Application Report'.
     """
     username = account['MEROSHARE_USER']
-    print(f"[{username}] Starting detailed Application Report check...")
+    print(f"[{username}] Starting targeted Status Watchdog...")
 
     try:
-        # Navigate to My ASBA -> Application Report
+        # Step 1: Collect names of available IPOs from 'Apply for Issue'
         page.wait_for_selector(".nav-link:has-text('My ASBA')", timeout=15000)
         page.click(".nav-link:has-text('My ASBA')")
         page.wait_for_timeout(2000)
 
-        page.wait_for_selector("a:has-text('Application Report')", timeout=10000)
+        page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
+        page.click("a:has-text('Apply for Issue')")
+        page.wait_for_load_state('networkidle')
+        page.wait_for_timeout(3000)
+
+        active_ipo_names = page.evaluate("""
+            () => {
+                const names = Array.from(document.querySelectorAll('.company-name, .issue-name, h4, .d-flex b, strong'))
+                              .map(el => el.innerText.trim())
+                              .filter(t => t.length > 5);
+                return [...new Set(names)]; // Unique names
+            }
+        """)
+
+        if not active_ipo_names:
+            print(f"[{username}] No active IPOs found in 'Apply for Issue'. Skipping status check.")
+            return
+
+        print(f"[{username}] Monitoring status for: {', '.join(active_ipo_names)}")
+
+        # Step 2: Switch to 'Application Report'
         page.click("a:has-text('Application Report')")
         page.wait_for_load_state('networkidle')
         page.wait_for_timeout(3000)
 
-        # 1. Get List of all IPOs and their corresponding indices/buttons
-        report_data = page.evaluate("""
-            () => {
-                const rows = Array.from(document.querySelectorAll('.company-name, .issue-name, h4, .d-flex b, strong'))
-                             .map(el => el.innerText.trim())
-                             .filter(t => t.length > 5); // Simple filter to get likely names
-                
-                const buttons = Array.from(document.querySelectorAll('button, a')).filter(el => el.innerText.includes('Report'));
-                return rows.slice(0, buttons.length).map((name, index) => ({ name, index }));
-            }
-        """)
-
-        if not report_data:
-            print(f"[{username}] No applied IPOs found in list.")
-            return
-
-        print(f"[{username}] Found {len(report_data)} IPO reports to check.")
-
-        for i, item in enumerate(report_data):
-            ipo_name = item['name']
-            print(f"[{username}] Processing {i+1}/{len(report_data)}: {ipo_name}")
-
+        for target_ipo in active_ipo_names:
+            print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Always ensure we are on the Report List page
-                if not page.is_visible("a:has-text('Application Report')"):
-                    page.click(".nav-link:has-text('My ASBA')")
-                    page.wait_for_timeout(1000)
-                    page.click("a:has-text('Application Report')")
-                    page.wait_for_load_state('networkidle')
-                    page.wait_for_timeout(2000)
-
-                # Find the 'Report' button for THIS specific IPO
+                # Find the 'Report' button for THIS specific target IPO
                 clicked = page.evaluate(f"""
                     (targetName) => {{
                         const rows = Array.from(document.querySelectorAll('tr, .d-flex'));
                         for (const row of rows) {{
-                            if (row.innerText.includes(targetName)) {{
+                            const rowText = row.innerText;
+                            if (rowText.includes(targetName)) {{
                                 const btn = Array.from(row.querySelectorAll('button, a')).find(el => el.innerText.includes('Report'));
                                 if (btn) {{
                                     btn.click();
@@ -573,23 +567,22 @@ def check_status(page, account):
                         }}
                         return false;
                     }}
-                """, ipo_name)
+                """, target_ipo)
 
                 if not clicked:
-                    print(f"[{username}] Could not find Report button for {ipo_name}. Skipping.")
+                    print(f"[{username}] ⏳ {target_ipo} not found in application reports yet (maybe hasn't been applied).")
                     continue
 
                 page.wait_for_load_state('networkidle')
                 page.wait_for_timeout(2000)
 
-                # 2. On the Detail Report Page read status and remark
+                # Read status from the detail page
                 detail_status = page.evaluate("""
                     () => {
                         const labels = Array.from(document.querySelectorAll('label, th, td, b, span'));
                         const findValue = (searchText) => {
                             const label = labels.find(el => el.innerText.toLowerCase().trim().includes(searchText));
                             if (!label) return null;
-                            
                             let value = '';
                             if (label.tagName === 'TD' && label.nextElementSibling) {
                                 value = label.nextElementSibling.innerText;
@@ -600,37 +593,33 @@ def check_status(page, account):
                             }
                             return value.trim();
                         };
-
-                        const status = findValue('status');
-                        const remark = findValue('remark');
-                        return { status, remark };
+                        return { status: findValue('status'), remark: findValue('remark') };
                     }
                 """)
 
                 status_val = (detail_status.get('status') or "").lower()
                 remark_val = (detail_status.get('remark') or "").lower()
+                print(f"[{username}] {target_ipo} -> Status: {status_val}, Remark: {remark_val}")
 
-                print(f"[{username}] {ipo_name} -> Status: {status_val}, Remark: {remark_val}")
-
-                # 3. Notification Logic
+                # Notification logic for final results
                 if "verified" in status_val and "unverified" not in status_val:
-                    msg = f"{ipo_name} has been applied successfully."
+                    msg = f"{target_ipo} has been applied successfully."
                     print(f"[{username}] ✅ SUCCESS: {msg}")
                     send_mqtt_notification(msg, username)
                 elif "rejected" in status_val or "insufficient" in remark_val or "balance" in remark_val:
-                    msg = f"Your IPO ({ipo_name}) has not been applied due to insufficient balance. Please topup amount and try again."
+                    msg = f"Your IPO ({target_ipo}) has not been applied due to insufficient balance. Please topup amount and try again."
                     print(f"[{username}] ❌ REJECTED: {msg}")
                     send_mqtt_notification(msg, username)
                 else:
-                    print(f"[{username}] ⏳ {ipo_name} is still '{status_val}'. No notification sent.")
+                    print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
 
-                # Go back to list
+                # Return to list
                 page.go_back()
                 page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(2000)
 
             except Exception as e:
-                print(f"[{username}] Error checking report for {ipo_name}: {e}")
+                print(f"[{username}] Error checking {target_ipo}: {e}")
                 page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
 
     except Exception as e:
