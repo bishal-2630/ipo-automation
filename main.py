@@ -119,28 +119,53 @@ def apply_ipo(page, account):
         page.screenshot(path=f"debug_tab_fail_{username}.png")
 
     print(f"[{username}] Looking for available IPOs...")
+    target_button = None
     try:
         # Wait for either buttons or a 'No Data' message
         page.wait_for_timeout(3000) 
         
-        apply_buttons = page.query_selector_all("button:has-text('Apply')")
+        # We need to find the row that contains 'Ordinary Shares' and its corresponding 'Apply' button
+        # Usually, MeroShare has a table where one column is 'Share Type'
+        target_button = page.evaluate("""
+            () => {
+                const rows = Array.from(document.querySelectorAll('tr'));
+                for (const row of rows) {
+                    const rowText = row.innerText.toLowerCase();
+                    const hasOrdinary = rowText.includes('ordinary shares');
+                    const hasApply = row.querySelector('button') && row.querySelector('button').innerText.includes('Apply');
+                    
+                    if (hasOrdinary && hasApply) {
+                        // Return some identifier for the button in this row
+                        // We'll click it directly via JS or return its index/selector
+                        row.querySelector('button').click();
+                        return "CLICKED_ORDINARY";
+                    }
+                }
+                
+                // Fallback: If we can't find 'Ordinary Shares' explicitly but there are Apply buttons,
+                // we'll check if any row contains 'Debenture' or 'Mutual Fund' and AVOID them.
+                const applyButtons = Array.from(document.querySelectorAll('button')).filter(b => b.innerText.includes('Apply'));
+                for (const btn of applyButtons) {
+                    const row = btn.closest('tr');
+                    const rowText = row ? row.innerText.toLowerCase() : "";
+                    if (!rowText.includes('debenture') && !rowText.includes('mutual fund')) {
+                        btn.click();
+                        return "CLICKED_NON_DEBENTURE";
+                    }
+                }
+                return null;
+            }
+        """)
         
-        # Diagnostic: Log what we see
-        issue_names = page.query_selector_all(".issue-name") # common class for IPO names in table
-        if issue_names:
-            print(f"Visible Issues: {[el.inner_text().strip() for el in issue_names]}")
+        if not target_button:
+            print(f"[{username}] No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds.")
     except Exception as e:
         print(f"Warning: [{username}] Error scanning for buttons: {e}")
-        apply_buttons = []
 
-    if not apply_buttons:
-        print(f"Error: [{username}] No available IPOs found. (Check debug_asba_{username}.png script captured)")
+    if not target_button:
+        print(f"Error: [{username}] No suitable IPOs found to apply. (Check debug_asba_{username}.png)")
         page.screenshot(path=f"debug_asba_{username}.png")
         return
-
-    print(f"Found {len(apply_buttons)} IPO(s). Applying for the first one...")
-    apply_buttons[0].scroll_into_view_if_needed()
-    apply_buttons[0].click()
 
     print(f"[{username}] Filling application form...")
     
