@@ -249,10 +249,89 @@ def apply_ipo(page, account):
     # Use exact IDs from diagnostics for Kitta and CRN
     print(f"[{username}] Filling Kitta and CRN with validation triggers...")
     
+    # NEW: Detect Minimum Kitta from the page
+    detected_min_kitta = 10
+    company_name = "Unknown"
+    try:
+        # Try to find the company name
+        company_elem = page.locator(".company-name, .issue-name, h4.modal-title").first
+        if company_elem.is_visible():
+            company_name = company_elem.inner_text().strip()
+            print(f"[{username}] Company: {company_name}")
+
+        # Try to find Minimum Unit on the page
+        # MeroShare usually has labels like 'Minimum Unit', 'Minimum quantity', or 'Min Unit'
+        min_kitta_value = page.evaluate("""
+            () => {
+                const labels = Array.from(document.querySelectorAll('label, span, td, th, div'));
+                const minLabel = labels.find(el => {
+                    const text = el.innerText.toLowerCase().trim();
+                    return text === 'minimum unit' || text === 'minimum quantity' || text === 'min unit' || 
+                           text.includes('minimum unit:') || text.includes('minimum quantity:');
+                });
+                if (minLabel) {
+                    // Try several strategies to find the value
+                    
+                    // 1. Check parent container for numbers
+                    let parent = minLabel.parentElement;
+                    let textContent = parent.innerText;
+                    let matches = textContent.match(/\\d+/g);
+                    if (matches && matches.length > 0) {
+                        // Avoid picking up labels that start with numbers, look for the 'value' part
+                        // Usually it's the last number in the group or the one following the label
+                        return parseInt(matches[matches.length - 1]);
+                    }
+                    
+                    // 2. Check next sibling
+                    if (minLabel.nextElementSibling) {
+                        const nextText = minLabel.nextElementSibling.innerText;
+                        const matchNext = nextText.match(/\\d+/);
+                        if (matchNext) return parseInt(matchNext[0]);
+                    }
+                }
+                return null;
+            }
+        """)
+        if min_kitta_value:
+            detected_min_kitta = int(min_kitta_value)
+            print(f"[{username}] Detected Minimum Kitta (on page): {detected_min_kitta}")
+        
+        # Try to find Share Price for logging
+        share_price = page.evaluate("""
+            () => {
+                const labels = Array.from(document.querySelectorAll('label, span, td, th'));
+                const priceLabel = labels.find(el => el.innerText.toLowerCase().includes('share price'));
+                if (priceLabel) {
+                    const parentText = priceLabel.parentElement.innerText;
+                    const match = parentText.match(/\\d+(\\.\\d+)?/);
+                    if (match) return match[0];
+                }
+                return null;
+            }
+        """)
+        if share_price:
+            print(f"[{username}] Share Price: {share_price}")
+
+        # Special handling for known high-kitta companies if detection fails or for extra safety
+        if "RELIANCE" in company_name.upper() or "NIFRA" in company_name.upper():
+            if detected_min_kitta < 50:
+                 print(f"[{username}] Special case: {company_name} detected. Ensuring at least 50 kitta.")
+                 detected_min_kitta = max(detected_min_kitta, 50)
+
+    except Exception as e:
+        print(f"Warning: [{username}] Could not detect minimum kitta: {e}")
+
+    # Determine final kitta to apply
+    user_kitta = int(account.get('KITTA', '10'))
+    final_kitta = max(user_kitta, detected_min_kitta)
+    
+    if final_kitta != user_kitta:
+        print(f"[{username}] Adjusting Kitta from {user_kitta} to {final_kitta} based on requirements.")
+
     # Kitta
     kitta_loc = page.locator("#appliedKitta")
     kitta_loc.clear()
-    kitta_loc.type(account.get('KITTA', '10'))
+    kitta_loc.type(str(final_kitta))
     page.keyboard.press("Tab") # Trigger calculation
     page.wait_for_timeout(500)
     
