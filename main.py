@@ -508,6 +508,67 @@ def get_accounts():
     
     return []
 
+def check_status(page, account):
+    """
+    Checks 'Application Report' for a final bank status.
+    Sends MQTT notification ONLY when a final result (Verified/Rejected) is found.
+    Stays silent if status is still 'Unverified' or 'In Process'.
+    """
+    username = account['MEROSHARE_USER']
+    print(f"[{username}] Navigating to Application Report...")
+
+    try:
+        page.wait_for_selector(".nav-link:has-text('My ASBA')", timeout=15000)
+        page.click(".nav-link:has-text('My ASBA')")
+        page.wait_for_timeout(2000)
+
+        page.wait_for_selector("a:has-text('Application Report')", timeout=10000)
+        page.click("a:has-text('Application Report')")
+        page.wait_for_load_state('networkidle')
+        page.wait_for_timeout(3000)
+
+        # Read the most recent application row
+        result = page.evaluate("""
+            () => {
+                const rows = Array.from(document.querySelectorAll('table tbody tr'));
+                if (!rows || rows.length === 0) return { status: 'NO_DATA', remark: '', company: '' };
+                const row = rows[0];
+                const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
+                return {
+                    status: cells[cells.length - 2] || '',
+                    remark: cells[cells.length - 1] || '',
+                    company: cells[0] || 'Your IPO',
+                    fullRow: row.innerText
+                };
+            }
+        """)
+
+        raw_status = result.get('status', '')
+        raw_remark = result.get('remark', '')
+        company     = result.get('company', 'Your IPO')
+        status = raw_status.lower()
+        remark = raw_remark.lower()
+
+        print(f"[{username}] Status: '{raw_status}' | Remark: '{raw_remark}'")
+
+        if 'verified' in status and 'un' not in status:
+            msg = f"{company} has been applied successfully."
+            print(f"[{username}] ✅ {msg}")
+            send_mqtt_notification(msg, username)
+
+        elif 'rejected' in status or 'insufficient' in remark or 'balance' in remark:
+            msg = "Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
+            print(f"[{username}] ❌ {msg}")
+            send_mqtt_notification(msg, username)
+
+        else:
+            # Still processing — wait silently for the next scheduled run
+            print(f"[{username}] ⏳ Still in process ('{raw_status}'). Will re-check on next schedule run.")
+
+    except Exception as e:
+        print(f"[{username}] Error during status check: {e}")
+
+
 def run_automation():
     accounts = get_accounts()
     if not accounts:
@@ -520,20 +581,16 @@ def run_automation():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        
+
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
             print(f"\n=============================================")
             print(f"Processing Account {i+1}/{count}: {username}")
             print(f"=============================================")
 
-            context = browser.new_page()
-            page = context
-
+            page = browser.new_page()
             try:
-                print("Opening MeroShare...")
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
-
                 MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
@@ -556,10 +613,68 @@ def run_automation():
                 print(f"Error: [{username}] Error processing account: {e}")
             finally:
                 page.close()
-        
+
         browser.close()
         print("\nAll accounts processed.")
         send_mqtt_notification("🏁 IPO Automation Completed for all accounts.")
 
+
+def run_status_check():
+    """
+    Watchdog: Logs in to each account and checks Application Report.
+    Only sends notification when a FINAL status is found.
+    Runs silently if still in process (bank/holiday delay).
+    """
+    accounts = get_accounts()
+    if not accounts:
+        print("Error: No accounts found.")
+        return
+
+    count = len(accounts)
+    print(f"🔍 Status Watchdog: Checking {count} account(s)...")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+
+        for i, account in enumerate(accounts):
+            username = account.get('MEROSHARE_USER')
+            print(f"\n=============================================")
+            print(f"Status Check {i+1}/{count}: {username}")
+            print(f"=============================================")
+
+            page = browser.new_page()
+            try:
+                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
+                MAX_RETRIES = 3
+                logged_in = False
+                for attempt in range(1, MAX_RETRIES + 1):
+                    if login(page, username, account['MEROSHARE_PASS'], account['DP_NAME']):
+                        logged_in = True
+                        break
+                    else:
+                        page.reload()
+                        page.wait_for_load_state('networkidle')
+                        time.sleep(2)
+
+                if logged_in:
+                    check_status(page, account)
+                else:
+                    print(f"Error: [{username}] Could not log in for status check.")
+
+            except Exception as e:
+                print(f"Error: [{username}] {e}")
+            finally:
+                page.close()
+
+        browser.close()
+        print("\nStatus check run complete.")
+
+
 if __name__ == "__main__":
-    run_automation()
+    # RUN_MODE=check_status → runs the status watchdog
+    # RUN_MODE=apply (default) → applies for IPOs
+    mode = os.getenv("RUN_MODE", "apply").lower()
+    if mode == "check_status":
+        run_status_check()
+    else:
+        run_automation()
