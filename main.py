@@ -578,13 +578,18 @@ def check_status(page, account):
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Button-first matching: Find "Report" then check its container for the name
+                # Button-first matching: Find "Report" or "Edit" then check its container for the name
                 clicked_info = page.evaluate(f"""
                     (targetName) => {{
                         const targetLow = targetName.toLowerCase().trim();
                         const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
+                        
+                        // Find all clickable actions
                         const allButtons = Array.from(document.querySelectorAll('button, a'))
-                                           .filter(el => el.innerText.trim() === 'Report');
+                                           .filter(el => {{
+                                               const text = el.innerText.trim().toLowerCase();
+                                               return text === 'report' || text === 'edit' || text.includes('view report');
+                                           }});
                         
                         for (const btn of allButtons) {{
                             let container = btn.parentElement;
@@ -596,18 +601,21 @@ def check_status(page, account):
                                 
                                 if (hasFull || hasWords) {{
                                     btn.click();
-                                    return {{ success: true }};
+                                    return {{ success: true, btnText: btn.innerText.trim() }};
                                 }}
                                 container = container.parentElement;
                                 depth++;
                             }}
                         }}
-                        return {{ success: false, buttonsFound: allButtons.length }};
+                        
+                        // Debug info if not found
+                        const seenActions = allButtons.map(b => b.innerText.trim());
+                        return {{ success: false, buttonsFound: allButtons.length, actions: seenActions }};
                     }}
                 """, target_ipo)
 
                 if not clicked_info.get('success'):
-                    print(f"[{username}] ⏳ {target_ipo} not found (Saw {clicked_info.get('buttonsFound', 0)} buttons).")
+                    print(f"[{username}] ⏳ {target_ipo} not found (Actions seen on page: {', '.join(clicked_info.get('actions', []))}).")
                     page.screenshot(path=f"debug_not_found_{target_ipo[:10].replace(' ', '_')}.png")
                     continue
 
