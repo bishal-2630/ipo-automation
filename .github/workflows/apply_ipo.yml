@@ -74,7 +74,7 @@ jobs:
           MQTT_PORT: ${{ secrets.MQTT_PORT }}
           MQTT_BASE_TOPIC: ${{ secrets.MQTT_BASE_TOPIC }}
           RUN_MODE: "apply"
-          HEADLESS: ${{ github.event.inputs.live_debug != 'true' }}
+          HEADLESS: ${{ github.event.inputs.live_debug != 'true' && github.event.inputs.live_debug != true }}
           DISPLAY: ":99"
         run: |
           if [ "${{ github.event.inputs.live_debug }}" == "true" ]; then
