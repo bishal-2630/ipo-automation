@@ -510,14 +510,14 @@ def get_accounts():
 
 def check_status(page, account):
     """
-    Checks ALL rows in 'Application Report' for final bank statuses.
-    Sends MQTT notification per IPO when a final result (Verified/Rejected) is found.
-    Stays silent for rows still 'Unverified' or 'In Process'.
+    Robustly checks all reports in 'Application Report' by clicking each 'Report' button.
+    Identifies IPOs by name to ensure consistent iteration even if the list order shifts.
     """
     username = account['MEROSHARE_USER']
-    print(f"[{username}] Navigating to Application Report...")
+    print(f"[{username}] Starting detailed Application Report check...")
 
     try:
+        # Navigate to My ASBA -> Application Report
         page.wait_for_selector(".nav-link:has-text('My ASBA')", timeout=15000)
         page.click(".nav-link:has-text('My ASBA')")
         page.wait_for_timeout(2000)
@@ -525,63 +525,116 @@ def check_status(page, account):
         page.wait_for_selector("a:has-text('Application Report')", timeout=10000)
         page.click("a:has-text('Application Report')")
         page.wait_for_load_state('networkidle')
+        page.wait_for_timeout(3000)
 
-        # Explicitly wait for the data table to appear (AJAX-loaded)
-        try:
-            page.wait_for_selector("table tbody tr", timeout=10000)
-        except:
-            page.screenshot(path=f"debug_report_{username}.png")
-            print(f"[{username}] ⏳ Application Report table not found. Screenshot saved. Will re-check on next run.")
-            return
-
-        # Read ALL application rows from the table
-        results = page.evaluate("""
+        # 1. Get List of all IPOs and their corresponding indices/buttons
+        report_data = page.evaluate("""
             () => {
-                const rows = Array.from(document.querySelectorAll('table tbody tr'));
-                if (!rows || rows.length === 0) return [];
+                const rows = Array.from(document.querySelectorAll('.company-name, .issue-name, h4, .d-flex b, strong'))
+                             .map(el => el.innerText.trim())
+                             .filter(t => t.length > 5); // Simple filter to get likely names
                 
-                return rows.map(row => {
-                    const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
-                    return {
-                        company: cells[0] || 'Unknown IPO',
-                        status:  cells[cells.length - 2] || '',
-                        remark:  cells[cells.length - 1] || ''
-                    };
-                });
+                const buttons = Array.from(document.querySelectorAll('button, a')).filter(el => el.innerText.includes('Report'));
+                return rows.slice(0, buttons.length).map((name, index) => ({ name, index }));
             }
         """)
 
-        if not results:
-            print(f"[{username}] ⏳ No application data found yet. Will re-check on next scheduled run.")
+        if not report_data:
+            print(f"[{username}] No applied IPOs found in list.")
             return
 
-        print(f"[{username}] Found {len(results)} applied IPO(s) in report.")
+        print(f"[{username}] Found {len(report_data)} IPO reports to check.")
 
-        for entry in results:
-            company    = entry.get('company', 'Unknown IPO')
-            raw_status = entry.get('status', '')
-            raw_remark = entry.get('remark', '')
-            status     = raw_status.lower()
-            remark     = raw_remark.lower()
+        for i, item in enumerate(report_data):
+            ipo_name = item['name']
+            print(f"[{username}] Processing {i+1}/{len(report_data)}: {ipo_name}")
 
-            print(f"[{username}] 📋 {company} → Status: '{raw_status}' | Remark: '{raw_remark}'")
+            try:
+                # Always ensure we are on the Report List page
+                if not page.is_visible("a:has-text('Application Report')"):
+                    page.click(".nav-link:has-text('My ASBA')")
+                    page.wait_for_timeout(1000)
+                    page.click("a:has-text('Application Report')")
+                    page.wait_for_load_state('networkidle')
+                    page.wait_for_timeout(2000)
 
-            if 'verified' in status and 'un' not in status:
-                msg = f"{company} has been applied successfully."
-                print(f"[{username}] ✅ {msg}")
-                send_mqtt_notification(msg, username)
+                # Find the 'Report' button for THIS specific IPO
+                clicked = page.evaluate(f"""
+                    (targetName) => {{
+                        const rows = Array.from(document.querySelectorAll('tr, .d-flex'));
+                        for (const row of rows) {{
+                            if (row.innerText.includes(targetName)) {{
+                                const btn = Array.from(row.querySelectorAll('button, a')).find(el => el.innerText.includes('Report'));
+                                if (btn) {{
+                                    btn.click();
+                                    return true;
+                                }}
+                            }}
+                        }}
+                        return false;
+                    }}
+                """, ipo_name)
 
-            elif 'rejected' in status or 'insufficient' in remark or 'balance' in remark:
-                msg = f"Your IPO ({company}) has not been applied due to insufficient balance. Please topup amount and try again."
-                print(f"[{username}] ❌ {msg}")
-                send_mqtt_notification(msg, username)
+                if not clicked:
+                    print(f"[{username}] Could not find Report button for {ipo_name}. Skipping.")
+                    continue
 
-            else:
-                # Still processing — wait silently for the next scheduled run
-                print(f"[{username}] ⏳ {company}: Still in process ('{raw_status}'). Will re-check on next run.")
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(2000)
+
+                # 2. On the Detail Report Page read status and remark
+                detail_status = page.evaluate("""
+                    () => {
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span'));
+                        const findValue = (searchText) => {
+                            const label = labels.find(el => el.innerText.toLowerCase().trim().includes(searchText));
+                            if (!label) return null;
+                            
+                            let value = '';
+                            if (label.tagName === 'TD' && label.nextElementSibling) {
+                                value = label.nextElementSibling.innerText;
+                            } else if (label.parentElement.nextElementSibling) {
+                                value = label.parentElement.nextElementSibling.innerText;
+                            } else if (label.nextElementSibling) {
+                                value = label.nextElementSibling.innerText;
+                            }
+                            return value.trim();
+                        };
+
+                        const status = findValue('status');
+                        const remark = findValue('remark');
+                        return { status, remark };
+                    }
+                """)
+
+                status_val = (detail_status.get('status') or "").lower()
+                remark_val = (detail_status.get('remark') or "").lower()
+
+                print(f"[{username}] {ipo_name} -> Status: {status_val}, Remark: {remark_val}")
+
+                # 3. Notification Logic
+                if "verified" in status_val and "unverified" not in status_val:
+                    msg = f"{ipo_name} has been applied successfully."
+                    print(f"[{username}] ✅ SUCCESS: {msg}")
+                    send_mqtt_notification(msg, username)
+                elif "rejected" in status_val or "insufficient" in remark_val or "balance" in remark_val:
+                    msg = f"Your IPO ({ipo_name}) has not been applied due to insufficient balance. Please topup amount and try again."
+                    print(f"[{username}] ❌ REJECTED: {msg}")
+                    send_mqtt_notification(msg, username)
+                else:
+                    print(f"[{username}] ⏳ {ipo_name} is still '{status_val}'. No notification sent.")
+
+                # Go back to list
+                page.go_back()
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(1000)
+
+            except Exception as e:
+                print(f"[{username}] Error checking report for {ipo_name}: {e}")
+                page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
 
     except Exception as e:
-        print(f"[{username}] Error during status check: {e}")
+        print(f"[{username}] Fatal error in check_status: {e}")
 
 
 def run_automation():
