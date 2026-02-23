@@ -48,9 +48,15 @@ jobs:
         if: github.event.inputs.live_debug == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11vnc novnc tmate
+          sudo apt-get install -y xvfb x11vnc novnc tmate x11-utils
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
+          # Wait for Xvfb to be ready
+          echo "Waiting for Xvfb..."
+          for i in {1..10}; do
+            xdpyinfo -display :99 >/dev/null 2>&1 && break
+            sleep 1
+          done
           x11vnc -display :99 -forever -nopw -bg -rfbport 5900
           # noVNC setup
           /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &
