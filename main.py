@@ -461,11 +461,14 @@ def apply_ipo(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
-                send_mqtt_notification(f"✅ SUCCESS: Applied for {company_name} ({final_kitta} kitta) - {username}", username)
+                send_mqtt_notification(f"{company_name} has been applied successfully.", username)
             else:
                 error_msg = toast_text
                 print(f"Application Result: {error_msg}")
-                send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
+                if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
+                    send_mqtt_notification(f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again.", username)
+                else:
+                    send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
         except:
              if not page.is_visible("#transactionPIN"):
                  print(f"[{username}] Application submitted successfully (modal closed).")
