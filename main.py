@@ -510,9 +510,9 @@ def get_accounts():
 
 def check_status(page, account):
     """
-    Checks 'Application Report' for a final bank status.
-    Sends MQTT notification ONLY when a final result (Verified/Rejected) is found.
-    Stays silent if status is still 'Unverified' or 'In Process'.
+    Checks ALL rows in 'Application Report' for final bank statuses.
+    Sends MQTT notification per IPO when a final result (Verified/Rejected) is found.
+    Stays silent for rows still 'Unverified' or 'In Process'.
     """
     username = account['MEROSHARE_USER']
     print(f"[{username}] Navigating to Application Report...")
@@ -527,43 +527,51 @@ def check_status(page, account):
         page.wait_for_load_state('networkidle')
         page.wait_for_timeout(3000)
 
-        # Read the most recent application row
-        result = page.evaluate("""
+        # Read ALL application rows from the table
+        results = page.evaluate("""
             () => {
                 const rows = Array.from(document.querySelectorAll('table tbody tr'));
-                if (!rows || rows.length === 0) return { status: 'NO_DATA', remark: '', company: '' };
-                const row = rows[0];
-                const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
-                return {
-                    status: cells[cells.length - 2] || '',
-                    remark: cells[cells.length - 1] || '',
-                    company: cells[0] || 'Your IPO',
-                    fullRow: row.innerText
-                };
+                if (!rows || rows.length === 0) return [];
+                
+                return rows.map(row => {
+                    const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
+                    return {
+                        company: cells[0] || 'Unknown IPO',
+                        status:  cells[cells.length - 2] || '',
+                        remark:  cells[cells.length - 1] || ''
+                    };
+                });
             }
         """)
 
-        raw_status = result.get('status', '')
-        raw_remark = result.get('remark', '')
-        company     = result.get('company', 'Your IPO')
-        status = raw_status.lower()
-        remark = raw_remark.lower()
+        if not results:
+            print(f"[{username}] ⏳ No application data found yet. Will re-check on next scheduled run.")
+            return
 
-        print(f"[{username}] Status: '{raw_status}' | Remark: '{raw_remark}'")
+        print(f"[{username}] Found {len(results)} applied IPO(s) in report.")
 
-        if 'verified' in status and 'un' not in status:
-            msg = f"{company} has been applied successfully."
-            print(f"[{username}] ✅ {msg}")
-            send_mqtt_notification(msg, username)
+        for entry in results:
+            company    = entry.get('company', 'Unknown IPO')
+            raw_status = entry.get('status', '')
+            raw_remark = entry.get('remark', '')
+            status     = raw_status.lower()
+            remark     = raw_remark.lower()
 
-        elif 'rejected' in status or 'insufficient' in remark or 'balance' in remark:
-            msg = "Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
-            print(f"[{username}] ❌ {msg}")
-            send_mqtt_notification(msg, username)
+            print(f"[{username}] 📋 {company} → Status: '{raw_status}' | Remark: '{raw_remark}'")
 
-        else:
-            # Still processing — wait silently for the next scheduled run
-            print(f"[{username}] ⏳ Still in process ('{raw_status}'). Will re-check on next schedule run.")
+            if 'verified' in status and 'un' not in status:
+                msg = f"{company} has been applied successfully."
+                print(f"[{username}] ✅ {msg}")
+                send_mqtt_notification(msg, username)
+
+            elif 'rejected' in status or 'insufficient' in remark or 'balance' in remark:
+                msg = f"Your IPO ({company}) has not been applied due to insufficient balance. Please topup amount and try again."
+                print(f"[{username}] ❌ {msg}")
+                send_mqtt_notification(msg, username)
+
+            else:
+                # Still processing — wait silently for the next scheduled run
+                print(f"[{username}] ⏳ {company}: Still in process ('{raw_status}'). Will re-check on next run.")
 
     except Exception as e:
         print(f"[{username}] Error during status check: {e}")
