@@ -621,60 +621,68 @@ def check_status(page, account):
                 # Read status from the detail page (even more robust extraction)
                 detail_status = page.evaluate("""
                     () => {
-                        const bodyText = document.body.innerText.toLowerCase();
-                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div'));
+                        const bodyText = document.body.innerText;
+                        const bodyLow = bodyText.toLowerCase();
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div, dt, dd'));
                         
                         const findValue = (searchText) => {
                             const label = labels.find(el => {
                                 const t = el.innerText.toLowerCase().trim();
-                                return t === searchText || t.startsWith(searchText + ':') || t.includes(searchText + ' ');
+                                return t === searchText || t === searchText + ':' || (t.startsWith(searchText) && t.length < searchText.length + 3);
                             });
                             if (!label) return null;
                             
-                            // 1. Check if value is in the same text element (e.g., "Status: Verified")
+                            // 1. Check if value is in the same text element
                             if (label.innerText.includes(':')) {
                                 const parts = label.innerText.split(':');
                                 if (parts[1] && parts[1].trim().length > 0) return parts[1].trim();
                             }
                             
-                            // 2. Check siblings
-                            if (label.nextElementSibling) return label.nextElementSibling.innerText.trim();
+                            // 2. Check next sibling
+                            if (label.nextElementSibling) {
+                                const st = label.nextElementSibling.innerText.trim();
+                                if (st.length > 0) return st;
+                            }
                             
-                            // 3. Check table structure
-                            if (label.tagName === 'TH' || label.tagName === 'TD') {
-                                let parent = label.parentElement;
-                                let index = Array.from(parent.children).indexOf(label);
-                                if (parent.nextElementSibling && parent.nextElementSibling.children[index]) {
-                                    return parent.nextElementSibling.children[index].innerText.trim();
-                                }
+                            // 3. Check parent's next sibling (common in MeroShare grid)
+                            if (label.parentElement && label.parentElement.nextElementSibling) {
+                                const pst = label.parentElement.nextElementSibling.innerText.trim();
+                                if (pst.length > 0) return pst;
                             }
                             
                             return null;
                         };
                         
-                        const statusKeys = ['status', 'verification status', 'app status'];
+                        // Prioritize Bank/Verification specific labels
+                        const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
                         let statusLine = null;
                         for (const k of statusKeys) {
                             statusLine = findValue(k);
-                            if (statusLine) break;
+                            if (statusLine && statusLine.length > 2 && !statusLine.toLowerCase().includes('date')) break;
                         }
                         
-                        // Fallback: If no explicit label, check if "Verified" or "Rejected" is just floating in the text
-                        if (!statusLine) {
-                            if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
-                            else if (bodyText.includes('rejected')) statusLine = 'rejected';
-                            else if (bodyText.includes('failed')) statusLine = 'failed';
+                        // Fallback: Keyword scan if label-based fails
+                        if (!statusLine || statusLine.length < 3) {
+                            if (bodyLow.includes('verified from bank') || bodyLow.includes('verified at bank')) statusLine = 'verified';
+                            else if (bodyLow.includes('rejected by bank')) statusLine = 'rejected';
+                            else if (bodyLow.includes('unverified') && bodyLow.includes('bank')) statusLine = 'unverified';
+                            else if (bodyLow.includes('verified')) statusLine = 'verified';
                         }
 
                         return { 
                             status: statusLine, 
-                            remark: findValue('remark') || findValue('reason') 
+                            remark: findValue('remark') || findValue('reason'),
+                            full_text_sample: bodyText.substring(0, 300).replace(/\\n/g, ' ')
                         };
                     }
                 """)
 
                 status_val = (detail_status.get('status') or "").lower()
                 remark_val = (detail_status.get('remark') or "").lower()
+                
+                if not status_val:
+                    print(f"[{username}] Debug: No status found. Page starts with: {detail_status.get('full_text_sample')}")
+
                 print(f"[{username}] {target_ipo} -> Status: {status_val}, Remark: {remark_val}")
 
                 # Notification logic for final results
