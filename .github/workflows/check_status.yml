@@ -1,13 +1,18 @@
-name: IPO Automation Daily
+name: IPO Status Watchdog
 
 on:
   schedule:
-    # Apply: Runs at 11:30 AM Nepal Time (UTC+5:45) = 05:45 UTC every day
-    - cron: "45 5 * * *"
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+    # Apply runs at 11:30 AM NPT (05:45 UTC)
+    # Check 1: 7h later  → 6:30 PM NPT  = 12:45 UTC
+    - cron: "45 12 * * *"
+    # Check 2: 14h later → 1:30 AM NPT  = 19:45 UTC
+    - cron: "45 19 * * *"
+    # Check 3: 21h later → 8:30 AM NPT  = 02:45 UTC
+    - cron: "45 2 * * *"
+  workflow_dispatch:
 
 jobs:
-  apply-ipo:
+  check-ipo-status:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,23 +26,14 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install -r requirements.txt
-          pip install paho-mqtt
           playwright install chromium
 
-      - name: Run IPO Automation Script
+      - name: Run Status Watchdog
         env:
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
           MQTT_BROKER: ${{ secrets.MQTT_BROKER }}
           MQTT_PORT: ${{ secrets.MQTT_PORT }}
           MQTT_BASE_TOPIC: ${{ secrets.MQTT_BASE_TOPIC }}
-          RUN_MODE: "apply"
+          RUN_MODE: "check_status"
         run: |
           python main.py
-
-      - name: Upload Debug Screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-screenshots
-          path: "*.png"
-          retention-days: 1
