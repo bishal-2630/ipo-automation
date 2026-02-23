@@ -3,9 +3,40 @@ from dotenv import load_dotenv
 import os
 import time
 import json
+import paho.mqtt.client as mqtt
 
 # Load environment variables
 load_dotenv()
+
+def send_mqtt_notification(message, topic_suffix=None):
+    """
+    Sends a notification via MQTT to EMQX broker (broker.emqx.io).
+    """
+    broker = os.getenv("MQTT_BROKER", "broker.emqx.io")
+    port = int(os.getenv("MQTT_PORT", 1883))
+    base_topic = os.getenv("MQTT_BASE_TOPIC", "mero_share/status")
+    
+    topic = f"{base_topic}/{topic_suffix}" if topic_suffix else base_topic
+    
+    try:
+        # Use newer CallbackAPIVersion.VERSION2 for paho-mqtt
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        
+        # Support for SSL (Port 8883 or 8084 requires TLS in script)
+        if port in [8883, 8084]:
+            client.tls_set()
+            
+        username = os.getenv("MQTT_USERNAME")
+        password = os.getenv("MQTT_PASSWORD")
+        if username and password:
+            client.username_pw_set(username, password)
+            
+        client.connect(broker, port, 60)
+        client.publish(topic, message)
+        client.disconnect()
+        print(f"MQTT Notification Sent to {topic}")
+    except Exception as e:
+        print(f"Warning: Failed to send MQTT notification: {e}")
 
 def login(page, username, password, dp_name):
     """
@@ -158,7 +189,9 @@ def apply_ipo(page, account):
         """)
         
         if not target_button:
-            print(f"[{username}] No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds.")
+            msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
+            print(f"[{username}] {msg}")
+            send_mqtt_notification(f"⚠️ {msg}", username)
     except Exception as e:
         print(f"Warning: [{username}] Error scanning for buttons: {e}")
 
@@ -428,8 +461,11 @@ def apply_ipo(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
+                send_mqtt_notification(f"✅ SUCCESS: Applied for {company_name} ({final_kitta} kitta) - {username}", username)
             else:
-                print(f"Application Result: {toast_text}")
+                error_msg = toast_text
+                print(f"Application Result: {error_msg}")
+                send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
         except:
              if not page.is_visible("#transactionPIN"):
                  print(f"[{username}] Application submitted successfully (modal closed).")
@@ -475,7 +511,9 @@ def run_automation():
         print("Error: No accounts found. Check accounts.json, ACCOUNTS_JSON secret, or .env file.")
         return
 
-    print(f"Found {len(accounts)} account(s) to process.")
+    count = len(accounts)
+    print(f"Found {count} account(s) to process.")
+    send_mqtt_notification(f"🚀 IPO Automation Started: Processing {count} accounts.")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -483,7 +521,7 @@ def run_automation():
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
             print(f"\n=============================================")
-            print(f"Processing Account {i+1}/{len(accounts)}: {username}")
+            print(f"Processing Account {i+1}/{count}: {username}")
             print(f"=============================================")
 
             context = browser.new_page()
@@ -518,6 +556,7 @@ def run_automation():
         
         browser.close()
         print("\nAll accounts processed.")
+        send_mqtt_notification("🏁 IPO Automation Completed for all accounts.")
 
 if __name__ == "__main__":
     run_automation()
