@@ -15,22 +15,22 @@ def send_mqtt_notification(message, topic_suffix=None):
     broker = os.getenv("MQTT_BROKER") or "broker.emqx.io"
     port = int(os.getenv("MQTT_PORT") or 1883)
     base_topic = os.getenv("MQTT_BASE_TOPIC") or "mero_share/status"
-    
+
     topic = f"{base_topic}/{topic_suffix}" if topic_suffix else base_topic
-    
+
     try:
         # Use newer CallbackAPIVersion.VERSION2 for paho-mqtt
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        
+
         # Support for SSL (Port 8883 or 8084 requires TLS in script)
         if port in [8883, 8084]:
             client.tls_set()
-            
+
         username = os.getenv("MQTT_USERNAME")
         password = os.getenv("MQTT_PASSWORD")
         if username and password:
             client.username_pw_set(username, password)
-            
+
         client.connect(broker, port, 60)
         client.publish(topic, message)
         client.disconnect()
@@ -43,7 +43,7 @@ def login(page, username, password, dp_name):
     Attempts to login a specific user.
     """
     print(f"Logging in as {username}...")
-    
+
     print(f"Selecting DP: {dp_name}...")
     page.wait_for_selector("#selectBranch", timeout=10000)
     page.click("#selectBranch")
@@ -52,7 +52,7 @@ def login(page, username, password, dp_name):
     page.wait_for_timeout(1000) 
     page.keyboard.press("Enter")
     page.wait_for_timeout(1000) 
-    
+
     # NEW: Try to blur the dropdown to ensure fields are interactable
     page.mouse.click(0, 0) 
     page.wait_for_timeout(500)
@@ -66,15 +66,15 @@ def login(page, username, password, dp_name):
                 page.fill(selector, username)
                 found = True
                 break
-        
+
         if not found:
             # If none found immediately, wait longer for the primary one
             page.wait_for_selector("#txtUserName", timeout=20000)
             page.fill("#txtUserName", username)
-        
+
         # Small pause before password
         page.wait_for_timeout(500)
-        
+
         # Robust password selection
         password_selectors = ["#txtPassword", "input[name='password']", "input[placeholder='Password']"]
         p_found = False
@@ -83,11 +83,11 @@ def login(page, username, password, dp_name):
                 page.fill(selector, password)
                 p_found = True
                 break
-        
+
         if not p_found:
             page.wait_for_selector("#txtPassword", timeout=10000)
             page.fill("#txtPassword", password)
-            
+
     except Exception as e:
         print(f"[{username}] Could not find form fields. State at failure:")
         # Diagnostic: List all inputs found on the page
@@ -101,16 +101,16 @@ def login(page, username, password, dp_name):
         print(f"Found {len(inputs)} inputs: {input_info}")
         page.screenshot(path=f"debug_login_form_{username}.png")
         raise e
-    
+
     # Note: CAPTCHA logic removed as per user request
     pass
 
     page.click("button:has-text('Login')")
-    
+
     try:
         page.wait_for_load_state('networkidle')
         page.wait_for_timeout(2000) 
-        
+
         if page.locator("text=My ASBA").is_visible():
             return True
         elif page.locator(".toast-message").is_visible():
@@ -138,7 +138,7 @@ def apply_ipo(page, account):
     print(f"[{username}] Navigating to My ASBA...")
     page.wait_for_selector(".nav-link:has-text('My ASBA')")
     page.click(".nav-link:has-text('My ASBA')")
-    
+
     # NEW: Move explicitly to 'Apply for Issue' tab
     print(f"[{username}] Clicking 'Apply for Issue' tab...")
     try:
@@ -154,7 +154,7 @@ def apply_ipo(page, account):
     try:
         # Wait for either buttons or a 'No Data' message
         page.wait_for_timeout(3000) 
-        
+
         # We need to find the row that contains 'Ordinary Shares' and its corresponding 'Apply' button
         # Usually, MeroShare has a table where one column is 'Share Type'
         target_button = page.evaluate("""
@@ -187,7 +187,7 @@ def apply_ipo(page, account):
                 return null;
             }
         """)
-        
+
         if not target_button:
             msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
             print(f"[{username}] {msg}")
@@ -201,14 +201,14 @@ def apply_ipo(page, account):
         return
 
     print(f"[{username}] Filling application form...")
-    
+
     # Wait for the form to actually be visible
     page.wait_for_timeout(2000) 
-    
+
     print(f"Selecting Bank: {bank_name}...")
     try:
         page.wait_for_selector("#selectBank", timeout=20000)
-        
+
         # BRUTE FORCE JS SELECTION: This finds the option by text and forces selection/events
         # It handles partial, case-insensitive, and stripped matching
         selected_bank = page.evaluate(f"""
@@ -227,13 +227,13 @@ def apply_ipo(page, account):
                 return "FAIL: " + options.map(o => o.innerText.trim()).join(', ');
             }}
         """, bank_name)
-        
+
         if "FAIL" in selected_bank:
              raise Exception(f"Bank selection failed: {selected_bank}")
         print(f"[{username}] Selected Bank: {selected_bank}")
-        
+
         page.wait_for_timeout(1500) # Wait for Branch to populate
-        
+
         # BRUTE FORCE BRANCH SELECTION: Handles both SELECT and INPUT types
         print(f"[{username}] Selecting Branch...")
         selected_branch = page.evaluate("""
@@ -263,7 +263,7 @@ def apply_ipo(page, account):
                 return "UNKNOWN_TAG: " + el.tagName;
             }
         """)
-        
+
         if selected_branch == "INPUT_FIELD":
              # Handle input-based branch selection via keyboard
              page.click("#selectBranch")
@@ -278,7 +278,7 @@ def apply_ipo(page, account):
              print(f"[{username}] {selected_branch}")
 
         page.wait_for_timeout(1000) 
-        
+
         # NEW: Handle Bank Account Number selection (identifed as 'invalid' field in diagnostics)
         print(f"[{username}] Selecting Bank Account Number...")
         page.wait_for_selector("#accountNumber", timeout=10000)
@@ -306,7 +306,7 @@ def apply_ipo(page, account):
 
     # Use exact IDs from diagnostics for Kitta and CRN
     print(f"[{username}] Filling Kitta and CRN with validation triggers...")
-    
+
     # NEW: Detect Minimum Kitta from the page
     detected_min_kitta = 10
     company_name = "Unknown"
@@ -353,7 +353,7 @@ def apply_ipo(page, account):
         if min_kitta_value:
             detected_min_kitta = int(min_kitta_value)
             print(f"[{username}] Detected Minimum Kitta (on page): {detected_min_kitta}")
-        
+
         # Try to find Share Price for logging
         share_price = page.evaluate("""
             () => {
@@ -382,7 +382,7 @@ def apply_ipo(page, account):
     # Determine final kitta to apply
     user_kitta = int(account.get('KITTA', '10'))
     final_kitta = max(user_kitta, detected_min_kitta)
-    
+
     if final_kitta != user_kitta:
         print(f"[{username}] Adjusting Kitta from {user_kitta} to {final_kitta} based on requirements.")
 
@@ -392,7 +392,7 @@ def apply_ipo(page, account):
     kitta_loc.type(str(final_kitta))
     page.keyboard.press("Tab") # Trigger calculation
     page.wait_for_timeout(500)
-    
+
     # CRN
     crn_loc = page.locator("#crnNumber")
     crn_loc.clear()
@@ -413,19 +413,19 @@ def apply_ipo(page, account):
         errors = page.locator(".text-danger").all_inner_texts()
         if errors:
             print(f"[{username}] Form Errors Found: {errors}")
-    
+
     # Checkbox jiggle (ID is disclaimer)
     page.uncheck("#disclaimer")
     page.wait_for_timeout(300)
     page.check("#disclaimer")
-    
+
     # Final click to blur everything
     page.mouse.click(0, 0)
     page.wait_for_timeout(1000)
-    
+
     print(f"Form filled. Checking Proceed button state...")
     proceed_btn = page.locator("button:has-text('Proceed')")
-    
+
     # Wait for natural enabled state if possible
     try:
         page.wait_for_function("document.querySelector('button:has-text(\"Proceed\")').disabled === false", timeout=5000)
@@ -437,28 +437,28 @@ def apply_ipo(page, account):
     if tpin:
         print(f"[{username}] Entering TPIN...")
         page.wait_for_selector("#transactionPIN", timeout=10000)
-        
+
         page.locator("#transactionPIN").click()
         page.locator("#transactionPIN").clear()
         page.locator("#transactionPIN").type(tpin)
         page.keyboard.press("Tab") 
-        
+
         page.wait_for_timeout(1000)
         print(f"[{username}] Submitting application...")
-        
+
         # Click Apply
         apply_btn = page.locator(".modal-footer button:has-text('Apply')").first
         if not apply_btn.is_visible():
             apply_btn = page.locator("button:has-text('Apply')").first
-            
+
         apply_btn.click()
-        
+
         try:
             # Wait for success toast
             toast = page.wait_for_selector(".toast-success, .toast-message", timeout=10000)
             toast_text = toast.inner_text().strip()
             print(f"[{username}] Result: {toast_text}")
-            
+
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
                 send_mqtt_notification(f"{company_name} has been applied successfully.", username)
@@ -487,7 +487,7 @@ def get_accounts():
             return json.loads(accounts_env)
         except json.JSONDecodeError:
             print("Error: Error decoding ACCOUNTS_JSON environment variable.")
-    
+
     if os.path.exists("accounts.json"):
         try:
             with open("accounts.json", "r") as f:
@@ -505,7 +505,7 @@ def get_accounts():
             "BANK_NAME": os.getenv("BANK_NAME"),
             "KITTA": os.getenv("KITTA", "10")
         }]
-    
+
     return []
 
 def check_status(page, account):
@@ -554,10 +554,10 @@ def check_status(page, account):
         # Step 2: Switch to 'Application Report'
         report_link_selector = "a:has-text('Application Report')"
         page.click(report_link_selector)
-        
+
         # Robust wait for the list to load - handle 'loading' spinner
         print(f"[{username}] Waiting for Application Report to populate...")
-        
+
         for attempt in range(2):
             try:
                 # Wait for loading text/spinner to DISAPPEAR
@@ -578,111 +578,139 @@ def check_status(page, account):
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Hyper-strict row matching: Isolate the row that SPECIFICALLY belongs to this IPO
+                # Button-first matching: Find "Report" or "Edit" then check its container for the name
+                # Row-aware matching: Identify row boundaries first to avoid cross-clicks
                 clicked_info = page.evaluate(f"""
                     (targetName) => {{
                         const targetLow = targetName.toLowerCase().trim();
-                        // Get all possible row-like containers that have buttons
-                        const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, .row, div[style*="border"]'))
+                        const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
+                        
+                        // Find all clickable actions
+                        const allButtons = Array.from(document.querySelectorAll('button, a'))
+                                           .filter(el => {{
+                                               const text = el.innerText.trim().toLowerCase();
+                                               return text === 'report' || text === 'edit' || text.includes('view report');
+                                           }});
+                        // Look for common row containers: tr, div with certain patterns, or just blocks with buttons
+                        const allRows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, div[class*="row"]'))
                                          .filter(el => el.querySelector('button, a'));
                         
-                        // Find the one where the name is most prominent (closest match)
-                        let bestMatch = null;
-                        let minExtraText = Infinity;
-                        
-                        for (const row of rows) {{
+                        for (const btn of allButtons) {{
+                            let container = btn.parentElement;
+                            let depth = 0;
+                            while (container && depth < 6) {{
+                                const text = container.innerText.toLowerCase();
+                                const hasFull = text.includes(targetLow);
+                                const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
+                                
+                                if (hasFull || hasWords) {{
+                        for (const row of allRows) {{
+                            // Ensure we only look at the most granular "row" that contains the name
                             const text = row.innerText.toLowerCase();
-                            if (text.includes(targetLow)) {{
-                                // The "true" row is usually the one with the least amount of total text 
-                                // that still contains the full target name.
-                                const extra = text.length - targetLow.length;
-                                if (extra < minExtraText) {{
-                                    minExtraText = extra;
-                                    bestMatch = row;
+                            const hasFull = text.includes(targetLow);
+                            const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
+                            
+                            if (hasFull || hasWords) {{
+                                // Find buttons STRICTLY inside this row
+                                const btn = Array.from(row.querySelectorAll('button, a'))
+                                             .find(el => {{
+                                                 const t = el.innerText.trim().toLowerCase();
+                                                 return t === 'report' || t === 'edit' || t.includes('view');
+                                             }});
+                                if (btn) {{
+                                    btn.click();
+                                    return {{ success: true, btnText: btn.innerText.trim() }};
+                                    return {{ success: true, mode: btn.innerText.trim() }};
                                 }}
+                                container = container.parentElement;
+                                depth++;
                             }}
                         }}
                         
-                        if (bestMatch) {{
-                            const btn = Array.from(bestMatch.querySelectorAll('button, a'))
-                                         .find(el => {{
-                                             const t = el.innerText.trim().toLowerCase();
-                                             return t === 'report' || t === 'edit' || t.includes('view');
-                                         }});
-                            if (btn) {{
-                                btn.click();
-                                return {{ success: true }};
-                            }}
-                        }}
+                        // Debug info if not found
+                        const seenActions = allButtons.map(b => b.innerText.trim());
+                        return {{ success: false, buttonsFound: allButtons.length, actions: seenActions }};
                         return {{ success: false }};
                     }}
                 """, target_ipo)
 
                 if not clicked_info.get('success'):
-                    print(f"[{username}] ⏳ {target_ipo} button not found. Skipping.")
+                    print(f"[{username}] ⏳ {target_ipo} not found (Actions seen on page: {', '.join(clicked_info.get('actions', []))}).")
+                    page.screenshot(path=f"debug_not_found_{target_ipo[:10].replace(' ', '_')}.png")
+                    print(f"[{username}] ⏳ {target_ipo} not found or has no available action.")
                     continue
 
                 page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(4000)
+                page.wait_for_timeout(3000)
+                page.wait_for_timeout(4000) # Give more time for detail content
 
-                # Page Verification: Double-check we are on the correct company's report
-                page_header = page.evaluate("() => document.body.innerText.toLowerCase()")
-                # Verify if any significant part of the target name exists in the detail view
-                is_correct = any(word in page_header for word in target_ipo.lower().split(' ') if len(word) > 4)
-                
-                if not is_correct:
-                    print(f"[{username}] ⚠️ Warning: Cross-row click detected. Retrying {target_ipo}...")
-                    page.go_back()
-                    page.wait_for_timeout(2000)
-                    continue
-
-                # Read status from the detail page (Robuster extraction)
+                # Read status from the detail page (enhanced extraction)
+                # Read status from the detail page (even more robust extraction)
                 detail_status = page.evaluate("""
                     () => {
-                        const bodyText = document.body.innerText;
-                        const bodyLow = bodyText.toLowerCase();
-                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div, dt, dd, h4, h5'));
+                        const allText = document.body.innerText.toLowerCase();
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, .label'));
+                        const bodyText = document.body.innerText.toLowerCase();
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div'));
                         
                         const findValue = (searchText) => {
+                            const label = labels.find(el => el.innerText.toLowerCase().trim().includes(searchText));
                             const label = labels.find(el => {
                                 const t = el.innerText.toLowerCase().trim();
-                                return t === searchText || t === searchText + ':' || (t.startsWith(searchText) && t.length < searchText.length + 3);
+                                return t === searchText || t.startsWith(searchText + ':') || t.includes(searchText + ' ');
                             });
                             if (!label) return null;
                             
+                            let value = '';
+                            if (label.tagName === 'TD' && label.nextElementSibling) {
+                                value = label.nextElementSibling.innerText;
+                            } else if (label.parentElement.nextElementSibling) {
+                                value = label.parentElement.nextElementSibling.innerText;
+                            } else if (label.nextElementSibling) {
+                                value = label.nextElementSibling.innerText;
+                            } else if (label.parentElement.innerText.includes(':')) {
+                                value = label.parentElement.innerText.split(':')[1];
+                            // 1. Check if value is in the same text element (e.g., "Status: Verified")
                             if (label.innerText.includes(':')) {
                                 const parts = label.innerText.split(':');
                                 if (parts[1] && parts[1].trim().length > 0) return parts[1].trim();
                             }
-                            if (label.nextElementSibling) {
-                                const st = label.nextElementSibling.innerText.trim();
-                                if (st.length > 0) return st;
+                            return value ? value.trim() : null;
+                            
+                            // 2. Check siblings
+                            if (label.nextElementSibling) return label.nextElementSibling.innerText.trim();
+                            
+                            // 3. Check table structure
+                            if (label.tagName === 'TH' || label.tagName === 'TD') {
+                                let parent = label.parentElement;
+                                let index = Array.from(parent.children).indexOf(label);
+                                if (parent.nextElementSibling && parent.nextElementSibling.children[index]) {
+                                    return parent.nextElementSibling.children[index].innerText.trim();
+                                }
                             }
-                            if (label.parentElement && label.parentElement.nextElementSibling) {
-                                const pst = label.parentElement.nextElementSibling.innerText.trim();
-                                if (pst.length > 0) return pst;
-                            }
+                            
                             return null;
                         };
                         
-                        const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
+                        const statusKeys = ['status', 'verification status', 'app status'];
                         let statusLine = null;
                         for (const k of statusKeys) {
                             statusLine = findValue(k);
-                            if (statusLine && statusLine.length > 2 && !statusLine.toLowerCase().includes('date') && !statusLine.toLowerCase().includes('time')) break;
+                            if (statusLine) break;
                         }
                         
-                        if (!statusLine || statusLine.length < 3) {
-                            if (bodyLow.includes('verified from bank') || bodyLow.includes('verified at bank')) statusLine = 'verified';
-                            else if (bodyLow.includes('rejected by bank') || bodyLow.includes('rejected at bank')) statusLine = 'rejected';
-                            else if (bodyLow.includes('insufficient balance')) statusLine = 'rejected (insufficient balance)';
-                            else if (bodyLow.includes('unverified')) statusLine = 'unverified';
-                            else if (bodyLow.includes('verified')) statusLine = 'verified';
+                        // Fallback: If no explicit label, check if "Verified" or "Rejected" is just floating in the text
+                        if (!statusLine) {
+                            if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
+                            else if (bodyText.includes('rejected')) statusLine = 'rejected';
+                            else if (bodyText.includes('failed')) statusLine = 'failed';
                         }
 
                         return { 
+                            status: findValue('status') || (allText.includes('verified') ? 'verified' : null), 
+                            remark: findValue('remark') 
                             status: statusLine, 
-                            remark: findValue('remark') || findValue('reason') || findValue('rejection reason') || findValue('message')
+                            remark: findValue('remark') || findValue('reason') 
                         };
                     }
                 """)
