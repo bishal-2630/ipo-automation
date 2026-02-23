@@ -525,7 +525,14 @@ def check_status(page, account):
         page.wait_for_selector("a:has-text('Application Report')", timeout=10000)
         page.click("a:has-text('Application Report')")
         page.wait_for_load_state('networkidle')
-        page.wait_for_timeout(3000)
+
+        # Explicitly wait for the data table to appear (AJAX-loaded)
+        try:
+            page.wait_for_selector("table tbody tr", timeout=10000)
+        except:
+            page.screenshot(path=f"debug_report_{username}.png")
+            print(f"[{username}] ⏳ Application Report table not found. Screenshot saved. Will re-check on next run.")
+            return
 
         # Read ALL application rows from the table
         results = page.evaluate("""
