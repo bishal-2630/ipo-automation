@@ -553,72 +553,63 @@ def check_status(page, account):
 
         # Step 2: Switch to 'Application Report'
         page.click("a:has-text('Application Report')")
-        page.wait_for_load_state('networkidle')
-        page.wait_for_timeout(3000)
-
-        # Pre-scrape the Report list to see what's actually there
-        available_reports = page.evaluate("""
-            () => {
-                const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item'));
-                return rows.map(r => r.innerText.replace(/\\n/g, ' ').trim()).filter(t => t.length > 10);
-            }
-        """)
         
-        if available_reports:
-            print(f"[{username}] 📋 Currently in Application Report: {len(available_reports)} entries found.")
-        else:
-            print(f"[{username}] ⚠️ No rows found in Application Report table.")
-            page.screenshot(path=f"debug_empty_report_{username}.png")
+        # Robust wait for the list to load
+        try:
+            page.wait_for_selector("button:has-text('Report'), a:has-text('Report')", timeout=20000)
+        except:
+            print(f"[{username}] ⚠️ 'Report' buttons didn't appear. Saving debug screenshot.")
+            page.screenshot(path=f"debug_timeout_report_{username}.png")
+            return
 
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Find the 'Report' button for THIS specific target IPO
-                # We'll try even more flexible matching
+                # Button-first matching: Find "Report" then check its container for the name
                 clicked_info = page.evaluate(f"""
                     (targetName) => {{
-                        const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card'));
                         const targetLow = targetName.toLowerCase().trim();
-                        // Get first few words, but avoid small generic words
                         const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
+                        const allButtons = Array.from(document.querySelectorAll('button, a'))
+                                           .filter(el => el.innerText.trim() === 'Report');
                         
-                        for (const row of rows) {{
-                            const rowText = row.innerText.toLowerCase();
-                            
-                            // Check for full match or word-based intersection
-                            const hasFullMatch = rowText.includes(targetLow);
-                            const hasWordMatch = searchWords.length > 0 && searchWords.every(w => rowText.includes(w));
-                            
-                            if (hasFullMatch || hasWordMatch) {{
-                                const btn = Array.from(row.querySelectorAll('button, a')).find(el => el.innerText.includes('Report'));
-                                if (btn) {{
+                        for (const btn of allButtons) {{
+                            let container = btn.parentElement;
+                            let depth = 0;
+                            while (container && depth < 6) {{
+                                const text = container.innerText.toLowerCase();
+                                const hasFull = text.includes(targetLow);
+                                const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
+                                
+                                if (hasFull || hasWords) {{
                                     btn.click();
-                                    return {{ success: true, row: rowText.substring(0, 100) }};
+                                    return {{ success: true }};
                                 }}
+                                container = container.parentElement;
+                                depth++;
                             }}
                         }}
-                        return {{ success: false, rowsFound: rows.length }};
+                        return {{ success: false, buttonsFound: allButtons.length }};
                     }}
                 """, target_ipo)
 
                 if not clicked_info.get('success'):
-                    print(f"[{username}] ⏳ {target_ipo} not found in application reports yet.")
-                    # If it's the first time it fails, maybe log what WE saw
-                    if available_reports:
-                        print(f"[{username}] Debug: Top 3 reports seen: {available_reports[:3]}")
-                    page.screenshot(path=f"debug_match_fail_{target_ipo.replace(' ', '_')}.png")
+                    print(f"[{username}] ⏳ {target_ipo} not found (Saw {clicked_info.get('buttonsFound', 0)} buttons).")
+                    page.screenshot(path=f"debug_not_found_{target_ipo[:10].replace(' ', '_')}.png")
                     continue
 
                 page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(3000)
 
-                # Read status from the detail page
+                # Read status from the detail page (enhanced extraction)
                 detail_status = page.evaluate("""
                     () => {
-                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span'));
+                        const allText = document.body.innerText.toLowerCase();
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, .label'));
                         const findValue = (searchText) => {
                             const label = labels.find(el => el.innerText.toLowerCase().trim().includes(searchText));
                             if (!label) return null;
+                            
                             let value = '';
                             if (label.tagName === 'TD' && label.nextElementSibling) {
                                 value = label.nextElementSibling.innerText;
@@ -626,10 +617,16 @@ def check_status(page, account):
                                 value = label.parentElement.nextElementSibling.innerText;
                             } else if (label.nextElementSibling) {
                                 value = label.nextElementSibling.innerText;
+                            } else if (label.parentElement.innerText.includes(':')) {
+                                value = label.parentElement.innerText.split(':')[1];
                             }
-                            return value.trim();
+                            return value ? value.trim() : null;
                         };
-                        return { status: findValue('status'), remark: findValue('remark') };
+                        
+                        return { 
+                            status: findValue('status') || (allText.includes('verified') ? 'verified' : null), 
+                            remark: findValue('remark') 
+                        };
                     }
                 """)
 
