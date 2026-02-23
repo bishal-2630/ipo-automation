@@ -43,5 +43,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debug-report-screenshots
-          path: "debug_report_*.png"
+          path: "debug_*.png"
           retention-days: 1
