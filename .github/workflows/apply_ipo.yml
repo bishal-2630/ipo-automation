@@ -31,7 +31,7 @@ jobs:
           playwright install chromium
 
       - name: Setup GUI and Live Tunnel
-        if: github.event.inputs.live_debug == 'true'
+        if: ${{ github.event.inputs.live_debug == 'true' || github.event.inputs.live_debug == true }}
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb x11vnc novnc x11-utils
