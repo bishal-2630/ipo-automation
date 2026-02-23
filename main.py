@@ -630,32 +630,33 @@ def check_status(page, account):
                             });
                             if (!label) return null;
                             
-                            // 1. Check siblings
-                            if (label.nextElementSibling) return label.nextElementSibling.innerText.trim();
-                            
-                            // 2. Check parent's siblings (common in table layouts)
-                            if (label.parentElement && label.parentElement.nextElementSibling) {
-                                return label.parentElement.nextElementSibling.innerText.trim();
+                            let val = null;
+                            if (label.nextElementSibling) val = label.nextElementSibling.innerText.trim();
+                            else if (label.parentElement && label.parentElement.nextElementSibling) {
+                                val = label.parentElement.nextElementSibling.innerText.trim();
+                            } else if (label.innerText.includes(':')) {
+                                val = label.innerText.split(':')[1].trim();
                             }
                             
-                            // 3. Check for colon in text
-                            if (label.innerText.includes(':')) {
-                                return label.innerText.split(':')[1].trim();
-                            }
+                            // Filter out garbage (dates, times, too short)
+                            if (val && (val.toLowerCase().includes('date') || val.toLowerCase().includes('time') || val.length < 3)) return null;
 
-                            return null;
+                            return val;
                         };
                         
-                        const statusKeys = ['status', 'verification status', 'app status'];
+                        // Prioritize specific status fields
+                        const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
                         let statusLine = null;
                         for (const k of statusKeys) {
                             statusLine = findValue(k);
                             if (statusLine) break;
                         }
                         
-                        if (!statusLine) {
+                        // Fallback: Check if common status words are present in the body
+                        if (!statusLine || statusLine.length < 3) {
                             if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
                             else if (bodyText.includes('rejected')) statusLine = 'rejected';
+                            else if (bodyText.includes('unverified')) statusLine = 'unverified';
                         }
 
                         return { 
