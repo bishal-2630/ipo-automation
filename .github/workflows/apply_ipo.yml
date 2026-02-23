@@ -5,6 +5,12 @@ on:
     # Apply: Runs at 11:30 AM Nepal Time (UTC+5:45) = 05:45 UTC every day
     - cron: "45 5 * * *"
   workflow_dispatch: # Allows manual trigger from GitHub UI
+    inputs:
+      live_debug:
+        description: 'Enable Live Debug Mode (Watch browser live via VNC)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   apply-ipo:
@@ -24,6 +30,19 @@ jobs:
           pip install paho-mqtt
           playwright install chromium
 
+      - name: Setup GUI for Live Debug
+        if: github.event.inputs.live_debug == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11vnc novnc tmate
+          Xvfb :99 -screen 0 1280x720x24 &
+          export DISPLAY=:99
+          x11vnc -display :99 -forever -nopw -bg -rfbport 5900
+          # noVNC setup
+          /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &
+          echo "GUI Environment started on DISPLAY :99"
+          echo "VNC on port 5900, noVNC on port 6080"
+
       - name: Run IPO Automation Script
         env:
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
@@ -31,13 +50,33 @@ jobs:
           MQTT_PORT: ${{ secrets.MQTT_PORT }}
           MQTT_BASE_TOPIC: ${{ secrets.MQTT_BASE_TOPIC }}
           RUN_MODE: "apply"
+          HEADLESS: ${{ github.event.inputs.live_debug != 'true' }}
+          DISPLAY: ":99"
         run: |
-          python main.py
+          if [ "${{ github.event.inputs.live_debug }}" == "true" ]; then
+            echo "🚀 LIVE DEBUG MODE ENABLED"
+            echo "1. Connect to tmate: https://tmate.io/"
+            echo "Wait... Starting tmate for tunnel..."
+            tmate -S /tmp/tmate.sock new-session -d
+            tmate -S /tmp/tmate.sock wait tmate-ready
+            TMATE_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
+            echo "----------------------------------------------------------------"
+            echo "VISUAL DEBUG LINK: $TMATE_URL"
+            echo "Once in tmate terminal, run: 'python main.py'"
+            echo "Then open a local terminal and run: 'ssh -L 6080:localhost:6080 <tmate_ssh_string>'"
+            echo "Then visit http://localhost:6080/vnc.html in your browser."
+            echo "----------------------------------------------------------------"
+            # Keep alive for user interaction
+            tmate -S /tmp/tmate.sock wait tmate-ready
+            sleep 300
+          else
+            python main.py
+          fi
 
-      - name: Upload Debug Screenshots
+      - name: Upload Debug Artifacts (Screenshots)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots
           path: "*.png"
-          retention-days: 1
+          retention-days: 3

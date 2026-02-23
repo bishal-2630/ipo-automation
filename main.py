@@ -706,7 +706,8 @@ def run_automation():
     send_mqtt_notification(f"🚀 IPO Automation Started: Processing {count} accounts.")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        headless = os.getenv("HEADLESS", "true").lower() == "true"
+        browser = p.chromium.launch(headless=headless)
 
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
@@ -760,7 +761,8 @@ def run_status_check():
     print(f"🔍 Status Watchdog: Checking {count} account(s)...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        headless = os.getenv("HEADLESS", "true").lower() == "true"
+        browser = p.chromium.launch(headless=headless)
 
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
