@@ -578,33 +578,31 @@ def check_status(page, account):
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Row-aware matching: Identify row boundaries first to avoid cross-clicks
+                # Row-aware matching: Identify EXACT row boundaries
                 clicked_info = page.evaluate(f"""
                     (targetName) => {{
                         const targetLow = targetName.toLowerCase().trim();
-                        const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
+                        // Find all elements that contain the name and have at least one button
+                        // We want the most granular one (no children should also match both name and button)
+                        const candidates = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, .row'))
+                                         .filter(el => {{
+                                             const text = el.innerText.toLowerCase();
+                                             return text.includes(targetLow) && el.querySelector('button, a');
+                                         }});
                         
-                        // Look for common row containers: tr, div with certain patterns, or just blocks with buttons
-                        const allRows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, div[class*="row"]'))
-                                         .filter(el => el.querySelector('button, a'));
+                        // Pick the candidate with the smallest area/text length - this is usually the "true" row
+                        candidates.sort((a, b) => a.innerText.length - b.innerText.length);
+                        const row = candidates[0];
                         
-                        for (const row of allRows) {{
-                            // Ensure we only look at the most granular "row" that contains the name
-                            const text = row.innerText.toLowerCase();
-                            const hasFull = text.includes(targetLow);
-                            const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
-                            
-                            if (hasFull || hasWords) {{
-                                // Find buttons STRICTLY inside this row
-                                const btn = Array.from(row.querySelectorAll('button, a'))
-                                             .find(el => {{
-                                                 const t = el.innerText.trim().toLowerCase();
-                                                 return t === 'report' || t === 'edit' || t.includes('view');
-                                             }});
-                                if (btn) {{
-                                    btn.click();
-                                    return {{ success: true, mode: btn.innerText.trim() }};
-                                }}
+                        if (row) {{
+                            const btn = Array.from(row.querySelectorAll('button, a'))
+                                         .find(el => {{
+                                             const t = el.innerText.trim().toLowerCase();
+                                             return t === 'report' || t === 'edit' || t.includes('view');
+                                         }});
+                            if (btn) {{
+                                btn.click();
+                                return {{ success: true }};
                             }}
                         }}
                         return {{ success: false }};
@@ -612,18 +610,31 @@ def check_status(page, account):
                 """, target_ipo)
 
                 if not clicked_info.get('success'):
-                    print(f"[{username}] ⏳ {target_ipo} not found or has no available action.")
+                    print(f"[{username}] ⏳ {target_ipo} button not found. Skipping.")
                     continue
 
                 page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(4000) # Give more time for detail content
+                page.wait_for_timeout(4000)
 
-                # Read status from the detail page (even more robust extraction)
+                # Page Verification: Ensure we are on the RIGHT report page
+                page_header = page.evaluate("() => document.body.innerText.toLowerCase()")
+                target_low = target_ipo.lower()
+                # Split target name into words and see if enough match (MeroShare sometimes truncates headers)
+                target_words = [w for w in target_low.split(' ') if len(w) > 3][:3]
+                is_correct_page = any(w in page_header for w in target_low.split(' ') if len(w) > 4)
+                
+                if not is_correct_page:
+                    print(f"[{username}] ⚠️ Warning: Landed on wrong page for {target_ipo}. Go back and retry.")
+                    page.go_back()
+                    page.wait_for_timeout(2000)
+                    continue
+
+                # Read status from the detail page
                 detail_status = page.evaluate("""
                     () => {
                         const bodyText = document.body.innerText;
                         const bodyLow = bodyText.toLowerCase();
-                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div, dt, dd'));
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div, dt, dd, h4, h5'));
                         
                         const findValue = (searchText) => {
                             const label = labels.find(el => {
@@ -632,47 +643,40 @@ def check_status(page, account):
                             });
                             if (!label) return null;
                             
-                            // 1. Check if value is in the same text element
                             if (label.innerText.includes(':')) {
                                 const parts = label.innerText.split(':');
                                 if (parts[1] && parts[1].trim().length > 0) return parts[1].trim();
                             }
-                            
-                            // 2. Check next sibling
                             if (label.nextElementSibling) {
                                 const st = label.nextElementSibling.innerText.trim();
                                 if (st.length > 0) return st;
                             }
-                            
-                            // 3. Check parent's next sibling (common in MeroShare grid)
                             if (label.parentElement && label.parentElement.nextElementSibling) {
                                 const pst = label.parentElement.nextElementSibling.innerText.trim();
                                 if (pst.length > 0) return pst;
                             }
-                            
                             return null;
                         };
                         
-                        // Prioritize Bank/Verification specific labels
                         const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
                         let statusLine = null;
                         for (const k of statusKeys) {
                             statusLine = findValue(k);
-                            if (statusLine && statusLine.length > 2 && !statusLine.toLowerCase().includes('date')) break;
+                            if (statusLine && statusLine.length > 2 && !statusLine.toLowerCase().includes('date') && !statusLine.toLowerCase().includes('time')) break;
                         }
                         
-                        // Fallback: Keyword scan if label-based fails
                         if (!statusLine || statusLine.length < 3) {
+                            // Smarter keyword fallback
                             if (bodyLow.includes('verified from bank') || bodyLow.includes('verified at bank')) statusLine = 'verified';
-                            else if (bodyLow.includes('rejected by bank')) statusLine = 'rejected';
-                            else if (bodyLow.includes('unverified') && bodyLow.includes('bank')) statusLine = 'unverified';
+                            else if (bodyLow.includes('rejected by bank') || bodyLow.includes('rejected at bank')) statusLine = 'rejected';
+                            else if (bodyLow.includes('insufficient balance')) statusLine = 'rejected (insufficient balance)';
+                            else if (bodyLow.includes('unverified')) statusLine = 'unverified';
                             else if (bodyLow.includes('verified')) statusLine = 'verified';
                         }
 
                         return { 
                             status: statusLine, 
-                            remark: findValue('remark') || findValue('reason'),
-                            full_text_sample: bodyText.substring(0, 300).replace(/\\n/g, ' ')
+                            remark: findValue('remark') || findValue('reason') || findValue('rejection reason')
                         };
                     }
                 """)
@@ -681,7 +685,7 @@ def check_status(page, account):
                 remark_val = (detail_status.get('remark') or "").lower()
                 
                 if not status_val:
-                    print(f"[{username}] Debug: No status found. Page starts with: {detail_status.get('full_text_sample')}")
+                    print(f"[{username}] Debug: No status found. Page starts with: {page_header[:300]}")
 
                 print(f"[{username}] {target_ipo} -> Status: {status_val}, Remark: {remark_val}")
 
