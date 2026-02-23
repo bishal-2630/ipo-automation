@@ -530,10 +530,18 @@ def check_status(page, account):
 
         active_ipo_names = page.evaluate("""
             () => {
-                const names = Array.from(document.querySelectorAll('.company-name, .issue-name, h4, .d-flex b, strong'))
-                              .map(el => el.innerText.trim())
-                              .filter(t => t.length > 5);
-                return [...new Set(names)]; // Unique names
+                const items = Array.from(document.querySelectorAll('.company-name, .issue-name, h4, .d-flex b, strong'));
+                const names = [];
+                for (const el of items) {
+                    let text = el.innerText.trim();
+                    if (text.length > 5) {
+                        // Clean up: Take only the first part before any '-' or newline
+                        // This usually captures the core "Super Khudi Hydropower Limited"
+                        const cleanName = text.split(/[\\n-]/)[0].trim();
+                        if (cleanName.length > 5) names.push(cleanName);
+                    }
+                }
+                return [...new Set(names)];
             }
         """)
 
@@ -554,10 +562,13 @@ def check_status(page, account):
                 # Find the 'Report' button for THIS specific target IPO
                 clicked = page.evaluate(f"""
                     (targetName) => {{
-                        const rows = Array.from(document.querySelectorAll('tr, .d-flex'));
+                        const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item'));
+                        const searchName = targetName.toLowerCase().split(' ').slice(0, 3).join(' '); // Use first 3 words for matching
+                        
                         for (const row of rows) {{
-                            const rowText = row.innerText;
-                            if (rowText.includes(targetName)) {{
+                            const rowText = row.innerText.toLowerCase();
+                            // Flexible match: row contains the clean name OR first 3 words
+                            if (rowText.includes(targetName.toLowerCase()) || rowText.includes(searchName)) {{
                                 const btn = Array.from(row.querySelectorAll('button, a')).find(el => el.innerText.includes('Report'));
                                 if (btn) {{
                                     btn.click();
