@@ -160,30 +160,30 @@ def apply_ipo(page, account):
         target_button = page.evaluate("""
             () => {
                 const rows = Array.from(document.querySelectorAll('tr'));
+                
                 for (const row of rows) {
                     const rowText = row.innerText.toLowerCase();
-                    const hasOrdinary = rowText.includes('ordinary shares');
-                    const hasApply = row.querySelector('button') && row.querySelector('button').innerText.includes('Apply');
+                    const btn = row.querySelector('button');
                     
-                    if (hasOrdinary && hasApply) {
-                        // Return some identifier for the button in this row
-                        // We'll click it directly via JS or return its index/selector
-                        row.querySelector('button').click();
+                    // Only proceed if the row has an Apply button
+                    if (!btn || !btn.innerText.toLowerCase().includes('apply')) continue;
+
+                    // STRICT: Must explicitly say "ordinary shares"
+                    const isOrdinary = rowText.includes('ordinary shares') || rowText.includes('ordinary share');
+                    
+                    // STRICT: Block anything that looks like non-equity
+                    const isDebenture  = rowText.includes('debenture') || rowText.includes('debentures');
+                    const isBond       = rowText.includes('bond');
+                    const isMutualFund = rowText.includes('mutual fund');
+                    const isPreference = rowText.includes('preference share');
+                    
+                    if (isOrdinary && !isDebenture && !isBond && !isMutualFund && !isPreference) {
+                        btn.click();
                         return "CLICKED_ORDINARY";
                     }
                 }
                 
-                // Fallback: If we can't find 'Ordinary Shares' explicitly but there are Apply buttons,
-                // we'll check if any row contains 'Debenture' or 'Mutual Fund' and AVOID them.
-                const applyButtons = Array.from(document.querySelectorAll('button')).filter(b => b.innerText.includes('Apply'));
-                for (const btn of applyButtons) {
-                    const row = btn.closest('tr');
-                    const rowText = row ? row.innerText.toLowerCase() : "";
-                    if (!rowText.includes('debenture') && !rowText.includes('mutual fund')) {
-                        btn.click();
-                        return "CLICKED_NON_DEBENTURE";
-                    }
-                }
+                // No Ordinary Share IPO found — do NOT fall back
                 return null;
             }
         """)
