@@ -578,24 +578,33 @@ def check_status(page, account):
         for target_ipo in active_ipo_names:
             print(f"[{username}] Checking report for: {target_ipo}")
             try:
-                # Row-aware matching: Identify EXACT row boundaries
+                # Hyper-strict row matching: Isolate the row that SPECIFICALLY belongs to this IPO
                 clicked_info = page.evaluate(f"""
                     (targetName) => {{
                         const targetLow = targetName.toLowerCase().trim();
-                        // Find all elements that contain the name and have at least one button
-                        // We want the most granular one (no children should also match both name and button)
-                        const candidates = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, .row'))
-                                         .filter(el => {{
-                                             const text = el.innerText.toLowerCase();
-                                             return text.includes(targetLow) && el.querySelector('button, a');
-                                         }});
+                        // Get all possible row-like containers that have buttons
+                        const rows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, .row, div[style*="border"]'))
+                                         .filter(el => el.querySelector('button, a'));
                         
-                        // Pick the candidate with the smallest area/text length - this is usually the "true" row
-                        candidates.sort((a, b) => a.innerText.length - b.innerText.length);
-                        const row = candidates[0];
+                        // Find the one where the name is most prominent (closest match)
+                        let bestMatch = null;
+                        let minExtraText = Infinity;
                         
-                        if (row) {{
-                            const btn = Array.from(row.querySelectorAll('button, a'))
+                        for (const row of rows) {{
+                            const text = row.innerText.toLowerCase();
+                            if (text.includes(targetLow)) {{
+                                // The "true" row is usually the one with the least amount of total text 
+                                // that still contains the full target name.
+                                const extra = text.length - targetLow.length;
+                                if (extra < minExtraText) {{
+                                    minExtraText = extra;
+                                    bestMatch = row;
+                                }}
+                            }}
+                        }}
+                        
+                        if (bestMatch) {{
+                            const btn = Array.from(bestMatch.querySelectorAll('button, a'))
                                          .find(el => {{
                                              const t = el.innerText.trim().toLowerCase();
                                              return t === 'report' || t === 'edit' || t.includes('view');
@@ -616,20 +625,18 @@ def check_status(page, account):
                 page.wait_for_load_state('networkidle')
                 page.wait_for_timeout(4000)
 
-                # Page Verification: Ensure we are on the RIGHT report page
+                # Page Verification: Double-check we are on the correct company's report
                 page_header = page.evaluate("() => document.body.innerText.toLowerCase()")
-                target_low = target_ipo.lower()
-                # Split target name into words and see if enough match (MeroShare sometimes truncates headers)
-                target_words = [w for w in target_low.split(' ') if len(w) > 3][:3]
-                is_correct_page = any(w in page_header for w in target_low.split(' ') if len(w) > 4)
+                # Verify if any significant part of the target name exists in the detail view
+                is_correct = any(word in page_header for word in target_ipo.lower().split(' ') if len(word) > 4)
                 
-                if not is_correct_page:
-                    print(f"[{username}] ⚠️ Warning: Landed on wrong page for {target_ipo}. Go back and retry.")
+                if not is_correct:
+                    print(f"[{username}] ⚠️ Warning: Cross-row click detected. Retrying {target_ipo}...")
                     page.go_back()
                     page.wait_for_timeout(2000)
                     continue
 
-                # Read status from the detail page
+                # Read status from the detail page (Robuster extraction)
                 detail_status = page.evaluate("""
                     () => {
                         const bodyText = document.body.innerText;
@@ -666,7 +673,6 @@ def check_status(page, account):
                         }
                         
                         if (!statusLine || statusLine.length < 3) {
-                            // Smarter keyword fallback
                             if (bodyLow.includes('verified from bank') || bodyLow.includes('verified at bank')) statusLine = 'verified';
                             else if (bodyLow.includes('rejected by bank') || bodyLow.includes('rejected at bank')) statusLine = 'rejected';
                             else if (bodyLow.includes('insufficient balance')) statusLine = 'rejected (insufficient balance)';
@@ -676,17 +682,13 @@ def check_status(page, account):
 
                         return { 
                             status: statusLine, 
-                            remark: findValue('remark') || findValue('reason') || findValue('rejection reason')
+                            remark: findValue('remark') || findValue('reason') || findValue('rejection reason') || findValue('message')
                         };
                     }
                 """)
 
                 status_val = (detail_status.get('status') or "").lower()
                 remark_val = (detail_status.get('remark') or "").lower()
-                
-                if not status_val:
-                    print(f"[{username}] Debug: No status found. Page starts with: {page_header[:300]}")
-
                 print(f"[{username}] {target_ipo} -> Status: {status_val}, Remark: {remark_val}")
 
                 # Notification logic for final results
