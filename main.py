@@ -12,9 +12,9 @@ def send_mqtt_notification(message, topic_suffix=None):
     """
     Sends a notification via MQTT to EMQX broker (broker.emqx.io).
     """
-    broker = os.getenv("MQTT_BROKER", "broker.emqx.io")
-    port = int(os.getenv("MQTT_PORT", 1883))
-    base_topic = os.getenv("MQTT_BASE_TOPIC", "mero_share/status")
+    broker = os.getenv("MQTT_BROKER") or "broker.emqx.io"
+    port = int(os.getenv("MQTT_PORT") or 1883)
+    base_topic = os.getenv("MQTT_BASE_TOPIC") or "mero_share/status"
     
     topic = f"{base_topic}/{topic_suffix}" if topic_suffix else base_topic
     
