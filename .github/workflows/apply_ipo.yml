@@ -30,24 +30,42 @@ jobs:
           pip install paho-mqtt
           playwright install chromium
 
-      - name: Setup GUI for Live Debug
+      - name: Setup GUI and Live Tunnel
         if: github.event.inputs.live_debug == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11vnc novnc tmate x11-utils
+          sudo apt-get install -y xvfb x11vnc novnc x11-utils
+          # Install Cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          
           Xvfb :99 -screen 0 1280x720x24 &
           export DISPLAY=:99
+          
           # Wait for Xvfb to be ready
           echo "Waiting for Xvfb..."
           for i in {1..10}; do
             xdpyinfo -display :99 >/dev/null 2>&1 && break
             sleep 1
           done
+          
           x11vnc -display :99 -forever -nopw -bg -rfbport 5900
+          
           # noVNC setup
           /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080 &
+          
+          # Cloudflare Tunnel setup
+          echo "----------------------------------------------------------------"
+          echo "🚀 STARTING LIVE VIDEO TUNNEL..."
+          cloudflared tunnel --url http://localhost:6080/vnc.html --no-autoupdate > cloudflare.log 2>&1 &
+          
+          # Wait and extract URL from logs
+          sleep 5
+          CF_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare.com' cloudflare.log | head -n 1)
+          echo "----------------------------------------------------------------"
+          echo "VISUAL DEBUG LINK: $CF_URL"
+          echo "----------------------------------------------------------------"
           echo "GUI Environment started on DISPLAY :99"
-          echo "VNC on port 5900, noVNC on port 6080"
 
       - name: Run IPO Automation Script
         env:
@@ -61,20 +79,9 @@ jobs:
         run: |
           if [ "${{ github.event.inputs.live_debug }}" == "true" ]; then
             echo "🚀 LIVE DEBUG MODE ENABLED"
-            echo "1. Connect to tmate: https://tmate.io/"
-            echo "Wait... Starting tmate for tunnel..."
-            tmate -S /tmp/tmate.sock new-session -d
-            tmate -S /tmp/tmate.sock wait tmate-ready
-            TMATE_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
-            echo "----------------------------------------------------------------"
-            echo "VISUAL DEBUG LINK: $TMATE_URL"
-            echo "Once in tmate terminal, run: 'python main.py'"
-            echo "Then open a local terminal and run: 'ssh -L 6080:localhost:6080 <tmate_ssh_string>'"
-            echo "Then visit http://localhost:6080/vnc.html in your browser."
-            echo "----------------------------------------------------------------"
-            # Keep alive for user interaction
-            tmate -S /tmp/tmate.sock wait tmate-ready
-            sleep 300
+            python main.py
+            # Keep alive for a bit after completion to review the result
+            sleep 60
           else
             python main.py
           fi
@@ -83,6 +90,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-screenshots
+          name: debug-artifacts
           path: "*.png"
           retention-days: 3
