@@ -3,9 +3,40 @@ from dotenv import load_dotenv
 import os
 import time
 import json
+import paho.mqtt.client as mqtt
 
 # Load environment variables
 load_dotenv()
+
+def send_mqtt_notification(message, topic_suffix=None):
+    """
+    Sends a notification via MQTT to EMQX broker (broker.emqx.io).
+    """
+    broker = os.getenv("MQTT_BROKER") or "broker.emqx.io"
+    port = int(os.getenv("MQTT_PORT") or 1883)
+    base_topic = os.getenv("MQTT_BASE_TOPIC") or "mero_share/status"
+    
+    topic = f"{base_topic}/{topic_suffix}" if topic_suffix else base_topic
+    
+    try:
+        # Use newer CallbackAPIVersion.VERSION2 for paho-mqtt
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        
+        # Support for SSL (Port 8883 or 8084 requires TLS in script)
+        if port in [8883, 8084]:
+            client.tls_set()
+            
+        username = os.getenv("MQTT_USERNAME")
+        password = os.getenv("MQTT_PASSWORD")
+        if username and password:
+            client.username_pw_set(username, password)
+            
+        client.connect(broker, port, 60)
+        client.publish(topic, message)
+        client.disconnect()
+        print(f"MQTT Notification Sent to {topic}")
+    except Exception as e:
+        print(f"Warning: Failed to send MQTT notification: {e}")
 
 def login(page, username, password, dp_name):
     """
@@ -119,28 +150,55 @@ def apply_ipo(page, account):
         page.screenshot(path=f"debug_tab_fail_{username}.png")
 
     print(f"[{username}] Looking for available IPOs...")
+    target_button = None
     try:
         # Wait for either buttons or a 'No Data' message
         page.wait_for_timeout(3000) 
         
-        apply_buttons = page.query_selector_all("button:has-text('Apply')")
+        # We need to find the row that contains 'Ordinary Shares' and its corresponding 'Apply' button
+        # Usually, MeroShare has a table where one column is 'Share Type'
+        target_button = page.evaluate("""
+            () => {
+                const rows = Array.from(document.querySelectorAll('tr'));
+                
+                for (const row of rows) {
+                    const rowText = row.innerText.toLowerCase();
+                    const btn = row.querySelector('button');
+                    
+                    // Only proceed if the row has an Apply button
+                    if (!btn || !btn.innerText.toLowerCase().includes('apply')) continue;
+
+                    // STRICT: Must explicitly say "ordinary shares"
+                    const isOrdinary = rowText.includes('ordinary shares') || rowText.includes('ordinary share');
+                    
+                    // STRICT: Block anything that looks like non-equity
+                    const isDebenture  = rowText.includes('debenture') || rowText.includes('debentures');
+                    const isBond       = rowText.includes('bond');
+                    const isMutualFund = rowText.includes('mutual fund');
+                    const isPreference = rowText.includes('preference share');
+                    
+                    if (isOrdinary && !isDebenture && !isBond && !isMutualFund && !isPreference) {
+                        btn.click();
+                        return "CLICKED_ORDINARY";
+                    }
+                }
+                
+                // No Ordinary Share IPO found — do NOT fall back
+                return null;
+            }
+        """)
         
-        # Diagnostic: Log what we see
-        issue_names = page.query_selector_all(".issue-name") # common class for IPO names in table
-        if issue_names:
-            print(f"Visible Issues: {[el.inner_text().strip() for el in issue_names]}")
+        if not target_button:
+            msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
+            print(f"[{username}] {msg}")
+            send_mqtt_notification(f"⚠️ {msg}", username)
     except Exception as e:
         print(f"Warning: [{username}] Error scanning for buttons: {e}")
-        apply_buttons = []
 
-    if not apply_buttons:
-        print(f"Error: [{username}] No available IPOs found. (Check debug_asba_{username}.png script captured)")
+    if not target_button:
+        print(f"Error: [{username}] No suitable IPOs found to apply. (Check debug_asba_{username}.png)")
         page.screenshot(path=f"debug_asba_{username}.png")
         return
-
-    print(f"Found {len(apply_buttons)} IPO(s). Applying for the first one...")
-    apply_buttons[0].scroll_into_view_if_needed()
-    apply_buttons[0].click()
 
     print(f"[{username}] Filling application form...")
     
@@ -403,8 +461,14 @@ def apply_ipo(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
+                send_mqtt_notification(f"{company_name} has been applied successfully.", username)
             else:
-                print(f"Application Result: {toast_text}")
+                error_msg = toast_text
+                print(f"Application Result: {error_msg}")
+                if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
+                    send_mqtt_notification(f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again.", username)
+                else:
+                    send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
         except:
              if not page.is_visible("#transactionPIN"):
                  print(f"[{username}] Application submitted successfully (modal closed).")
@@ -444,30 +508,89 @@ def get_accounts():
     
     return []
 
+def check_status(page, account):
+    """
+    Checks 'Application Report' for a final bank status.
+    Sends MQTT notification ONLY when a final result (Verified/Rejected) is found.
+    Stays silent if status is still 'Unverified' or 'In Process'.
+    """
+    username = account['MEROSHARE_USER']
+    print(f"[{username}] Navigating to Application Report...")
+
+    try:
+        page.wait_for_selector(".nav-link:has-text('My ASBA')", timeout=15000)
+        page.click(".nav-link:has-text('My ASBA')")
+        page.wait_for_timeout(2000)
+
+        page.wait_for_selector("a:has-text('Application Report')", timeout=10000)
+        page.click("a:has-text('Application Report')")
+        page.wait_for_load_state('networkidle')
+        page.wait_for_timeout(3000)
+
+        # Read the most recent application row
+        result = page.evaluate("""
+            () => {
+                const rows = Array.from(document.querySelectorAll('table tbody tr'));
+                if (!rows || rows.length === 0) return { status: 'NO_DATA', remark: '', company: '' };
+                const row = rows[0];
+                const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
+                return {
+                    status: cells[cells.length - 2] || '',
+                    remark: cells[cells.length - 1] || '',
+                    company: cells[0] || 'Your IPO',
+                    fullRow: row.innerText
+                };
+            }
+        """)
+
+        raw_status = result.get('status', '')
+        raw_remark = result.get('remark', '')
+        company     = result.get('company', 'Your IPO')
+        status = raw_status.lower()
+        remark = raw_remark.lower()
+
+        print(f"[{username}] Status: '{raw_status}' | Remark: '{raw_remark}'")
+
+        if 'verified' in status and 'un' not in status:
+            msg = f"{company} has been applied successfully."
+            print(f"[{username}] ✅ {msg}")
+            send_mqtt_notification(msg, username)
+
+        elif 'rejected' in status or 'insufficient' in remark or 'balance' in remark:
+            msg = "Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
+            print(f"[{username}] ❌ {msg}")
+            send_mqtt_notification(msg, username)
+
+        else:
+            # Still processing — wait silently for the next scheduled run
+            print(f"[{username}] ⏳ Still in process ('{raw_status}'). Will re-check on next schedule run.")
+
+    except Exception as e:
+        print(f"[{username}] Error during status check: {e}")
+
+
 def run_automation():
     accounts = get_accounts()
     if not accounts:
         print("Error: No accounts found. Check accounts.json, ACCOUNTS_JSON secret, or .env file.")
         return
 
-    print(f"Found {len(accounts)} account(s) to process.")
+    count = len(accounts)
+    print(f"Found {count} account(s) to process.")
+    send_mqtt_notification(f"🚀 IPO Automation Started: Processing {count} accounts.")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        
+
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
             print(f"\n=============================================")
-            print(f"Processing Account {i+1}/{len(accounts)}: {username}")
+            print(f"Processing Account {i+1}/{count}: {username}")
             print(f"=============================================")
 
-            context = browser.new_page()
-            page = context
-
+            page = browser.new_page()
             try:
-                print("Opening MeroShare...")
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
-
                 MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
@@ -490,9 +613,68 @@ def run_automation():
                 print(f"Error: [{username}] Error processing account: {e}")
             finally:
                 page.close()
-        
+
         browser.close()
         print("\nAll accounts processed.")
+        send_mqtt_notification("🏁 IPO Automation Completed for all accounts.")
+
+
+def run_status_check():
+    """
+    Watchdog: Logs in to each account and checks Application Report.
+    Only sends notification when a FINAL status is found.
+    Runs silently if still in process (bank/holiday delay).
+    """
+    accounts = get_accounts()
+    if not accounts:
+        print("Error: No accounts found.")
+        return
+
+    count = len(accounts)
+    print(f"🔍 Status Watchdog: Checking {count} account(s)...")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+
+        for i, account in enumerate(accounts):
+            username = account.get('MEROSHARE_USER')
+            print(f"\n=============================================")
+            print(f"Status Check {i+1}/{count}: {username}")
+            print(f"=============================================")
+
+            page = browser.new_page()
+            try:
+                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
+                MAX_RETRIES = 3
+                logged_in = False
+                for attempt in range(1, MAX_RETRIES + 1):
+                    if login(page, username, account['MEROSHARE_PASS'], account['DP_NAME']):
+                        logged_in = True
+                        break
+                    else:
+                        page.reload()
+                        page.wait_for_load_state('networkidle')
+                        time.sleep(2)
+
+                if logged_in:
+                    check_status(page, account)
+                else:
+                    print(f"Error: [{username}] Could not log in for status check.")
+
+            except Exception as e:
+                print(f"Error: [{username}] {e}")
+            finally:
+                page.close()
+
+        browser.close()
+        print("\nStatus check run complete.")
+
 
 if __name__ == "__main__":
-    run_automation()
+    # RUN_MODE=check_status → runs the status watchdog
+    # RUN_MODE=apply (default) → applies for IPOs
+    mode = os.getenv("RUN_MODE", "apply").lower()
+    if mode == "check_status":
+        run_status_check()
+    else:
+        run_automation()
