@@ -241,7 +241,7 @@ def apply_ipo(page, account):
         if not target_button:
             msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
             print(f"[{username}] {msg}")
-            send_mqtt_notification(f"⚠️ {msg}", username)
+            # send_mqtt_notification(f"⚠️ {msg}", username)  <-- Silenced to follow "Success/Balance" only rule
     except Exception as e:
         print(f"Warning: [{username}] Error scanning for buttons: {e}")
 
@@ -759,7 +759,7 @@ def run_automation():
 
     count = len(accounts)
     print(f"Found {count} account(s) to process.")
-    send_mqtt_notification(f"🚀 IPO Automation Started: Processing {count} accounts.")
+    # Silenced global start notifications for main branch
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
@@ -799,7 +799,7 @@ def run_automation():
 
         browser.close()
         print("\nAll accounts processed.")
-        send_mqtt_notification("🏁 IPO Automation Completed for all accounts.")
+        # Silenced global end notifications for main branch
 
 
 def run_status_check():
