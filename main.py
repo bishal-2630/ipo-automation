@@ -239,6 +239,7 @@ def apply_ipo(page, account):
             }
         """)
 
+        if not target_button:
             msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
             print(f"[{username}] {msg}")
             send_mqtt_notification(f"⚠️ {msg}", username)
