@@ -763,9 +763,6 @@ def run_automation():
 
     count = len(accounts)
     print(f"Found {count} account(s) to process.")
-    msg = f"🚀 IPO Automation Started: Processing {count} accounts."
-    send_mqtt_notification(msg)
-    send_email_notification(os.getenv("SENDER_EMAIL"), "[MeroShare] Automation Started", msg)
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
@@ -805,9 +802,6 @@ def run_automation():
 
         browser.close()
         print("\nAll accounts processed.")
-        msg = "🏁 IPO Automation Completed for all accounts."
-        send_mqtt_notification(msg)
-        send_email_notification(os.getenv("SENDER_EMAIL"), "[MeroShare] Automation Completed", msg)
 
 
 def run_status_check():
