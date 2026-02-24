@@ -15,22 +15,22 @@ def send_mqtt_notification(message, topic_suffix=None):
     broker = os.getenv("MQTT_BROKER") or "broker.emqx.io"
     port = int(os.getenv("MQTT_PORT") or 1883)
     base_topic = os.getenv("MQTT_BASE_TOPIC") or "mero_share/status"
-    
+
     topic = f"{base_topic}/{topic_suffix}" if topic_suffix else base_topic
-    
+
     try:
         # Use newer CallbackAPIVersion.VERSION2 for paho-mqtt
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        
+
         # Support for SSL (Port 8883 or 8084 requires TLS in script)
         if port in [8883, 8084]:
             client.tls_set()
-            
+
         username = os.getenv("MQTT_USERNAME")
         password = os.getenv("MQTT_PASSWORD")
         if username and password:
             client.username_pw_set(username, password)
-            
+
         client.connect(broker, port, 60)
         client.publish(topic, message)
         client.disconnect()
@@ -145,7 +145,7 @@ def apply_ipo(page, account):
     print(f"[{username}] Navigating to My ASBA...")
     page.wait_for_selector(".nav-link:has-text('My ASBA')")
     page.click(".nav-link:has-text('My ASBA')")
-    
+
     # NEW: Move explicitly to 'Apply for Issue' tab
     print(f"[{username}] Clicking 'Apply for Issue' tab...")
     try:
@@ -161,7 +161,7 @@ def apply_ipo(page, account):
     try:
         # Wait for either buttons or a 'No Data' message
         page.wait_for_timeout(3000) 
-        
+
         # Robust row detection: Matches both table rows (tr) and list items (div/li)
         # Filters for "Ordinary Shares" and avoids Debentures/Mutual Funds
         target_button = page.evaluate("""
@@ -204,7 +204,7 @@ def apply_ipo(page, account):
                 return null;
             }
         """)
-        
+
         if not target_button:
             msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
             print(f"[{username}] {msg}")
@@ -218,14 +218,14 @@ def apply_ipo(page, account):
         return
 
     print(f"[{username}] Filling application form...")
-    
+
     # Wait for the form to actually be visible
     page.wait_for_timeout(2000) 
-    
+
     print(f"Selecting Bank: {bank_name}...")
     try:
         page.wait_for_selector("#selectBank", timeout=20000)
-        
+
         # BRUTE FORCE JS SELECTION: This finds the option by text and forces selection/events
         # It handles partial, case-insensitive, and stripped matching
         selected_bank = page.evaluate(f"""
@@ -244,13 +244,13 @@ def apply_ipo(page, account):
                 return "FAIL: " + options.map(o => o.innerText.trim()).join(', ');
             }}
         """, bank_name)
-        
+
         if "FAIL" in selected_bank:
              raise Exception(f"Bank selection failed: {selected_bank}")
         print(f"[{username}] Selected Bank: {selected_bank}")
-        
+
         page.wait_for_timeout(1500) # Wait for Branch to populate
-        
+
         # BRUTE FORCE BRANCH SELECTION: Handles both SELECT and INPUT types
         print(f"[{username}] Selecting Branch...")
         selected_branch = page.evaluate("""
@@ -280,7 +280,7 @@ def apply_ipo(page, account):
                 return "UNKNOWN_TAG: " + el.tagName;
             }
         """)
-        
+
         if selected_branch == "INPUT_FIELD":
              # Handle input-based branch selection via keyboard
              page.click("#selectBranch")
@@ -295,7 +295,7 @@ def apply_ipo(page, account):
              print(f"[{username}] {selected_branch}")
 
         page.wait_for_timeout(1000) 
-        
+
         # NEW: Handle Bank Account Number selection (identifed as 'invalid' field in diagnostics)
         print(f"[{username}] Selecting Bank Account Number...")
         page.wait_for_selector("#accountNumber", timeout=10000)
@@ -323,7 +323,7 @@ def apply_ipo(page, account):
 
     # Use exact IDs from diagnostics for Kitta and CRN
     print(f"[{username}] Filling Kitta and CRN with validation triggers...")
-    
+
     # NEW: Detect Minimum Kitta from the page
     detected_min_kitta = 10
     company_name = "Unknown"
@@ -370,7 +370,7 @@ def apply_ipo(page, account):
         if min_kitta_value:
             detected_min_kitta = int(min_kitta_value)
             print(f"[{username}] Detected Minimum Kitta (on page): {detected_min_kitta}")
-        
+
         # Try to find Share Price for logging
         share_price = page.evaluate("""
             () => {
@@ -399,7 +399,7 @@ def apply_ipo(page, account):
     # Determine final kitta to apply
     user_kitta = int(account.get('KITTA', '10'))
     final_kitta = max(user_kitta, detected_min_kitta)
-    
+
     if final_kitta != user_kitta:
         print(f"[{username}] Adjusting Kitta from {user_kitta} to {final_kitta} based on requirements.")
 
@@ -409,7 +409,7 @@ def apply_ipo(page, account):
     kitta_loc.type(str(final_kitta))
     page.keyboard.press("Tab") # Trigger calculation
     page.wait_for_timeout(500)
-    
+
     # CRN
     crn_loc = page.locator("#crnNumber")
     crn_loc.clear()
@@ -430,19 +430,19 @@ def apply_ipo(page, account):
         errors = page.locator(".text-danger").all_inner_texts()
         if errors:
             print(f"[{username}] Form Errors Found: {errors}")
-    
+
     # Checkbox jiggle (ID is disclaimer)
     page.uncheck("#disclaimer")
     page.wait_for_timeout(300)
     page.check("#disclaimer")
-    
+
     # Final click to blur everything
     page.mouse.click(0, 0)
     page.wait_for_timeout(1000)
-    
+
     print(f"Form filled. Checking Proceed button state...")
     proceed_btn = page.locator("button:has-text('Proceed')")
-    
+
     # Wait for natural enabled state if possible
     try:
         page.wait_for_function("document.querySelector('button:has-text(\"Proceed\")').disabled === false", timeout=5000)
@@ -454,28 +454,28 @@ def apply_ipo(page, account):
     if tpin:
         print(f"[{username}] Entering TPIN...")
         page.wait_for_selector("#transactionPIN", timeout=10000)
-        
+
         page.locator("#transactionPIN").click()
         page.locator("#transactionPIN").clear()
         page.locator("#transactionPIN").type(tpin)
         page.keyboard.press("Tab") 
-        
+
         page.wait_for_timeout(1000)
         print(f"[{username}] Submitting application...")
-        
+
         # Click Apply
         apply_btn = page.locator(".modal-footer button:has-text('Apply')").first
         if not apply_btn.is_visible():
             apply_btn = page.locator("button:has-text('Apply')").first
-            
+
         apply_btn.click()
-        
+
         try:
             # Wait for success toast
             toast = page.wait_for_selector(".toast-success, .toast-message", timeout=10000)
             toast_text = toast.inner_text().strip()
             print(f"[{username}] Result: {toast_text}")
-            
+
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
                 send_mqtt_notification(f"{company_name} has been applied successfully.", username)
@@ -504,7 +504,7 @@ def get_accounts():
             return json.loads(accounts_env)
         except json.JSONDecodeError:
             print("Error: Error decoding ACCOUNTS_JSON environment variable.")
-    
+
     if os.path.exists("accounts.json"):
         try:
             with open("accounts.json", "r") as f:
@@ -522,68 +522,194 @@ def get_accounts():
             "BANK_NAME": os.getenv("BANK_NAME"),
             "KITTA": os.getenv("KITTA", "10")
         }]
-    
+
     return []
 
 def check_status(page, account):
     """
-    Checks 'Application Report' for a final bank status.
-    Sends MQTT notification ONLY when a final result (Verified/Rejected) is found.
-    Stays silent if status is still 'Unverified' or 'In Process'.
+    Refined Status Watchdog:
+    1. Scrapes available IPO names from 'Apply for Issue'.
+    2. Only checks the status for those specific names in 'Application Report'.
     """
     username = account['MEROSHARE_USER']
-    print(f"[{username}] Navigating to Application Report...")
+    print(f"[{username}] Starting targeted Status Watchdog...")
 
     try:
+        # Step 1: Collect names of available IPOs from 'Apply for Issue'
         page.wait_for_selector(".nav-link:has-text('My ASBA')", timeout=15000)
         page.click(".nav-link:has-text('My ASBA')")
         page.wait_for_timeout(2000)
 
-        page.wait_for_selector("a:has-text('Application Report')", timeout=10000)
-        page.click("a:has-text('Application Report')")
+        page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
+        page.click("a:has-text('Apply for Issue')")
         page.wait_for_load_state('networkidle')
         page.wait_for_timeout(3000)
 
-        # Read the most recent application row
-        result = page.evaluate("""
+        active_ipo_names = page.evaluate("""
             () => {
-                const rows = Array.from(document.querySelectorAll('table tbody tr'));
-                if (!rows || rows.length === 0) return { status: 'NO_DATA', remark: '', company: '' };
-                const row = rows[0];
-                const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
-                return {
-                    status: cells[cells.length - 2] || '',
-                    remark: cells[cells.length - 1] || '',
-                    company: cells[0] || 'Your IPO',
-                    fullRow: row.innerText
-                };
+                const items = Array.from(document.querySelectorAll('.company-name, .issue-name, h4, .d-flex b, strong'));
+                const names = [];
+                for (const el of items) {
+                    let text = el.innerText.trim();
+                    if (text.length > 5) {
+                        // Clean up: Take only the first part before any '-' or newline
+                        // This usually captures the core "Super Khudi Hydropower Limited"
+                        const cleanName = text.split(/[\\n-]/)[0].trim();
+                        if (cleanName.length > 5) names.push(cleanName);
+                    }
+                }
+                return [...new Set(names)];
             }
         """)
 
-        raw_status = result.get('status', '')
-        raw_remark = result.get('remark', '')
-        company     = result.get('company', 'Your IPO')
-        status = raw_status.lower()
-        remark = raw_remark.lower()
+        if not active_ipo_names:
+            print(f"[{username}] No active IPOs found in 'Apply for Issue'. Skipping status check.")
+            return
 
-        print(f"[{username}] Status: '{raw_status}' | Remark: '{raw_remark}'")
+        print(f"[{username}] Monitoring status for: {', '.join(active_ipo_names)}")
 
-        if 'verified' in status and 'un' not in status:
-            msg = f"{company} has been applied successfully."
-            print(f"[{username}] ✅ {msg}")
-            send_mqtt_notification(msg, username)
+        # Step 2: Switch to 'Application Report'
+        report_link_selector = "a:has-text('Application Report')"
+        page.click(report_link_selector)
 
-        elif 'rejected' in status or 'insufficient' in remark or 'balance' in remark:
-            msg = "Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
-            print(f"[{username}] ❌ {msg}")
-            send_mqtt_notification(msg, username)
+        # Robust wait for the list to load - handle 'loading' spinner
+        print(f"[{username}] Waiting for Application Report to populate...")
 
-        else:
-            # Still processing — wait silently for the next scheduled run
-            print(f"[{username}] ⏳ Still in process ('{raw_status}'). Will re-check on next schedule run.")
+        for attempt in range(2):
+            try:
+                # Wait for loading text/spinner to DISAPPEAR
+                page.wait_for_selector("text=loading", state="detached", timeout=10000)
+                # Then wait for actual buttons to appear
+                page.wait_for_selector("button:has-text('Report'), a:has-text('Report')", timeout=15000)
+                break
+            except:
+                if attempt == 0:
+                    print(f"[{username}] ⏳ Report list still loading or empty. Proactively re-clicking...")
+                    page.click(report_link_selector)
+                    page.wait_for_timeout(3000)
+                else:
+                    print(f"[{username}] ⚠️ 'Report' buttons didn't appear after retry. Saving debug screenshot.")
+                    page.screenshot(path=f"debug_timeout_report_{username}.png")
+                    return
+
+        for target_ipo in active_ipo_names:
+            print(f"[{username}] Checking report for: {target_ipo}")
+            try:
+                # Identify and click 'Report' or 'Edit' for the specific IPO
+                clicked_info = page.evaluate(f"""
+                    (targetName) => {{
+                        const targetLow = targetName.toLowerCase().trim();
+                        const searchWords = targetLow.split(' ').filter(w => w.length > 2).slice(0, 3);
+                        
+                        // Look for common row containers
+                        const allRows = Array.from(document.querySelectorAll('tr, .d-flex-row, .application-item, .card, div[class*="row"]'))
+                                         .filter(el => el.querySelector('button, a'));
+                        
+                        for (const row of allRows) {{
+                            const text = row.innerText.toLowerCase();
+                            const hasFull = text.includes(targetLow);
+                            const hasWords = searchWords.length > 0 && searchWords.every(w => text.includes(w));
+                            
+                            if (hasFull || hasWords) {{
+                                // Find buttons inside this row
+                                const btn = Array.from(row.querySelectorAll('button, a'))
+                                             .find(el => {{
+                                                 const t = el.innerText.trim().toLowerCase();
+                                                 return t === 'report' || t === 'edit' || t.includes('view');
+                                             }});
+                                if (btn) {{
+                                    btn.click();
+                                    return {{ success: true, mode: btn.innerText.trim() }};
+                                }}
+                            }}
+                        }}
+                        return {{ success: false }};
+                    }}
+                """, target_ipo)
+
+                if not clicked_info.get('success'):
+                    print(f"[{username}] ⏳ {target_ipo} not found or has no available action.")
+                    continue
+
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(4000)
+
+                # Read status from the detail page (robust extraction)
+                detail_status = page.evaluate("""
+                    () => {
+                        const bodyText = document.body.innerText.toLowerCase();
+                        const labels = Array.from(document.querySelectorAll('label, th, td, b, span, p, div'));
+                        
+                        const findValue = (searchText) => {
+                            const label = labels.find(el => {
+                                const t = el.innerText.toLowerCase().trim();
+                                return t === searchText || t.startsWith(searchText + ':') || t.includes(searchText + ' ');
+                            });
+                            if (!label) return null;
+                            
+                            let val = null;
+                            if (label.nextElementSibling) val = label.nextElementSibling.innerText.trim();
+                            else if (label.parentElement && label.parentElement.nextElementSibling) {
+                                val = label.parentElement.nextElementSibling.innerText.trim();
+                            } else if (label.innerText.includes(':')) {
+                                val = label.innerText.split(':')[1].trim();
+                            }
+                            
+                            // Filter out garbage (dates, times, too short)
+                            if (val && (val.toLowerCase().includes('date') || val.toLowerCase().includes('time') || val.length < 3)) return null;
+
+                            return val;
+                        };
+                        
+                        // Prioritize specific status fields
+                        const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
+                        let statusLine = null;
+                        for (const k of statusKeys) {
+                            statusLine = findValue(k);
+                            if (statusLine) break;
+                        }
+                        
+                        // Fallback: Check if common status words are present in the body
+                        if (!statusLine || statusLine.length < 3) {
+                            if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
+                            else if (bodyText.includes('rejected')) statusLine = 'rejected';
+                            else if (bodyText.includes('unverified')) statusLine = 'unverified';
+                        }
+
+                        return { 
+                            status: statusLine, 
+                            remark: findValue('remark') || findValue('reason') 
+                        };
+                    }
+                """)
+
+                status_val = (detail_status.get('status') or "").lower()
+                remark_val = (detail_status.get('remark') or "").lower()
+                print(f"[{username}] {target_ipo} -> Status: {status_val}, Remark: {remark_val}")
+
+                # Notification logic for final results
+                if "verified" in status_val and "unverified" not in status_val:
+                    msg = f"{target_ipo} has been applied successfully."
+                    print(f"[{username}] ✅ SUCCESS: {msg}")
+                    send_mqtt_notification(msg, username)
+                elif "rejected" in status_val or "insufficient" in remark_val or "balance" in remark_val:
+                    msg = f"Your IPO ({target_ipo}) has not been applied due to insufficient balance. Please topup amount and try again."
+                    print(f"[{username}] ❌ REJECTED: {msg}")
+                    send_mqtt_notification(msg, username)
+                else:
+                    print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
+
+                # Return to list
+                page.go_back()
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(2000)
+
+            except Exception as e:
+                print(f"[{username}] Error checking {target_ipo}: {e}")
+                page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
 
     except Exception as e:
-        print(f"[{username}] Error during status check: {e}")
+        print(f"[{username}] Fatal error in check_status: {e}")
 
 
 def run_automation():
@@ -597,7 +723,7 @@ def run_automation():
     send_mqtt_notification(f"🚀 IPO Automation Started: Processing {count} accounts.")
 
     with sync_playwright() as p:
-        headless = os.getenv("HEADLESS", "true").lower() != "false"
+        headless = os.getenv("HEADLESS", "true").lower() == "true"
         browser = p.chromium.launch(headless=headless)
 
         for i, account in enumerate(accounts):
@@ -652,7 +778,7 @@ def run_status_check():
     print(f"🔍 Status Watchdog: Checking {count} account(s)...")
 
     with sync_playwright() as p:
-        headless = os.getenv("HEADLESS", "true").lower() != "false"
+        headless = os.getenv("HEADLESS", "true").lower() == "true"
         browser = p.chromium.launch(headless=headless)
 
         for i, account in enumerate(accounts):
