@@ -45,13 +45,29 @@ def login(page, username, password, dp_name):
     print(f"Logging in as {username}...")
     
     print(f"Selecting DP: {dp_name}...")
-    page.wait_for_selector("#selectBranch", timeout=10000)
-    page.click("#selectBranch")
-    page.wait_for_timeout(1000) 
-    page.keyboard.type(dp_name)
-    page.wait_for_timeout(1000) 
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(1000) 
+    try:
+        # Robust DP Selection: Try multiple common selectors for the DP dropdown
+        dp_selectors = ["#selectBranch", "select[name='selectBranch']", ".select2-selection", "select"]
+        dp_found = False
+        for selector in dp_selectors:
+            if page.locator(selector).is_visible():
+                page.click(selector)
+                dp_found = True
+                break
+        
+        if not dp_found:
+             page.wait_for_selector("#selectBranch", timeout=15000)
+             page.click("#selectBranch")
+
+        page.wait_for_timeout(1000) 
+        page.keyboard.type(dp_name)
+        page.wait_for_timeout(1000) 
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(1000) 
+    except Exception as e:
+        print(f"Warning: DP Selection issue: {e}")
+        # Take a screenshot to see what's wrong with the login page
+        page.screenshot(path=f"debug_login_dp_{username}.png")
     
     # NEW: Try to blur the dropdown to ensure fields are interactable
     page.mouse.click(0, 0) 
@@ -90,25 +106,16 @@ def login(page, username, password, dp_name):
             
     except Exception as e:
         print(f"[{username}] Could not find form fields. State at failure:")
-        # Diagnostic: List all inputs found on the page
-        inputs = page.query_selector_all("input")
-        input_info = []
-        for el in inputs:
-            i_id = el.get_attribute("id")
-            i_name = el.get_attribute("name")
-            i_type = el.get_attribute("type")
-            input_info.append(f"id={i_id}, name={i_name}, type={i_type}")
-        print(f"Found {len(inputs)} inputs: {input_info}")
-        page.screenshot(path=f"debug_login_form_{username}.png")
-        raise e
-    
-    # Note: CAPTCHA logic removed as per user request
-    pass
+        page.screenshot(path=f"debug_login_fields_{username}.png")
+        return False
 
+    # Capture login button text for debugging and try to click
+    print(f"Clicking Login button for {username}...")
     page.click("button:has-text('Login')")
     
+    # Wait for navigation/dashboard
     try:
-        page.wait_for_load_state('networkidle')
+        page.wait_for_load_state('networkidle', timeout=15000)
         page.wait_for_timeout(2000) 
         
         if page.locator("text=My ASBA").is_visible():
@@ -118,7 +125,7 @@ def login(page, username, password, dp_name):
             print(f"⚠️ Login Failed: {error_msg}")
             return False
         else:
-             if "dashboard" in page.url:
+             if "dashboard" in page.url or "dashboard" in page.content().lower():
                  return True
              return False
     except Exception as e:
@@ -155,13 +162,14 @@ def apply_ipo(page, account):
         # Wait for either buttons or a 'No Data' message
         page.wait_for_timeout(3000) 
         
-        # We need to find the row that contains 'Ordinary Shares' and its corresponding 'Apply' button
-        # Usually, MeroShare has a table where one column is 'Share Type'
+        # Robust row detection: Matches both table rows (tr) and list items (div/li)
+        # Filters for "Ordinary Shares" and avoids Debentures/Mutual Funds
         target_button = page.evaluate("""
             () => {
-                const rows = Array.from(document.querySelectorAll('tr'));
+                // Look for elements that likely represent a row or entry
+                const candidates = Array.from(document.querySelectorAll('tr, .row, div[class*="row"], .list-item, div[class*="entry"]'));
                 
-                for (const row of rows) {
+                for (const row of candidates) {
                     const rowText = row.innerText.toLowerCase();
                     const btn = row.querySelector('button');
                     
@@ -183,7 +191,16 @@ def apply_ipo(page, account):
                     }
                 }
                 
-                // No Ordinary Share IPO found — do NOT fall back
+                // Final fallback: Look for ANY button that has "Apply" in a container with "Ordinary Shares"
+                const allButtons = Array.from(document.querySelectorAll('button')).filter(b => b.innerText.toLowerCase().includes('apply'));
+                for (const b of allButtons) {
+                    const container = b.closest('div, tr, section');
+                    if (container && container.innerText.toLowerCase().includes('ordinary share')) {
+                        b.click();
+                        return "CLICKED_FALLBACK";
+                    }
+                }
+
                 return null;
             }
         """)
