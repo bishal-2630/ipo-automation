@@ -4,6 +4,9 @@ import os
 import time
 import json
 import paho.mqtt.client as mqtt
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +40,36 @@ def send_mqtt_notification(message, topic_suffix=None):
         print(f"MQTT Notification Sent to {topic}")
     except Exception as e:
         print(f"Warning: Failed to send MQTT notification: {e}")
+
+def send_email_notification(to_email, subject, message):
+    """
+    Sends an email notification via Gmail SMTP.
+    """
+    if not to_email:
+        return
+
+    sender_email = os.getenv("SENDER_EMAIL")
+    sender_password = os.getenv("SENDER_PASSWORD")
+    smtp_server = os.getenv("SMTP_SERVER") or "smtp.gmail.com"
+    smtp_port = int(os.getenv("SMTP_PORT") or 587)
+
+    if not (sender_email and sender_password):
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = f"IPO Automation <{sender_email}>"
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+        print(f"Email Notification Sent to {to_email}")
+    except Exception as e:
+        print(f"Warning: Failed to send email notification to {to_email}: {e}")
 
 def login(page, username, password, dp_name):
     """
@@ -478,14 +511,16 @@ def apply_ipo(page, account):
 
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
-                send_mqtt_notification(f"{company_name} has been applied successfully.", username)
+                msg = f"{company_name} has been applied successfully."
+                send_mqtt_notification(msg, username)
+                # STRICT: Email on success
+                send_email_notification(account.get('EMAIL'), f"[MeroShare] Success: {company_name}", f"Hi {username},\n\n{msg}")
             else:
                 error_msg = toast_text
                 print(f"Application Result: {error_msg}")
-                if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
-                    send_mqtt_notification(f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again.", username)
-                else:
-                    send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
+                # STRICT: Don't email on generic failures/errors here, only on successful submission.
+                # Insufficient balance is usually caught in 'check_status' later.
+                send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
         except:
              if not page.is_visible("#transactionPIN"):
                  print(f"[{username}] Application submitted successfully (modal closed).")
@@ -692,10 +727,14 @@ def check_status(page, account):
                     msg = f"{target_ipo} has been applied successfully."
                     print(f"[{username}] ✅ SUCCESS: {msg}")
                     send_mqtt_notification(msg, username)
+                    # STRICT: Send confirmed success status
+                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Verified!", f"Hi {username},\n\n{msg}")
                 elif "rejected" in status_val or "insufficient" in remark_val or "balance" in remark_val:
                     msg = f"Your IPO ({target_ipo}) has not been applied due to insufficient balance. Please topup amount and try again."
                     print(f"[{username}] ❌ REJECTED: {msg}")
                     send_mqtt_notification(msg, username)
+                    # STRICT: Send late-failure due to balance
+                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}")
                 else:
                     print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
 
