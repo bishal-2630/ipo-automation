@@ -4,6 +4,9 @@ import os
 import time
 import json
 import smtplib
+import random
+import string
+import secrets
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -40,6 +43,98 @@ def send_email_notification(to_email, subject, message):
         print(f"Email Notification Sent to {to_email}")
     except Exception as e:
         print(f"Warning: Failed to send email notification to {to_email}: {e}")
+
+def generate_new_password(length=12):
+    """
+    Generates a secure random password satisfying MeroShare requirements:
+    - Uppercase, Lowercase, Number, and Special Character
+    """
+    alphabet = string.ascii_letters + string.digits + "@#$!%*?&"
+    while True:
+        password = ''.join(secrets.choice(alphabet) for i in range(length))
+        if (any(c.islower() for c in password)
+                and any(c.isupper() for c in password)
+                and sum(c.isdigit() for c in password) >= 1
+                and any(c in "@#$!%*?&" for c in password)):
+            return password
+
+def update_local_account_password(username, new_password):
+    """
+    Updates the password for a specific user in the local accounts.json file.
+    """
+    if not os.path.exists("accounts.json"):
+        return False
+
+    try:
+        with open("accounts.json", "r") as f:
+            accounts = json.load(f)
+        
+        updated = False
+        for acc in accounts:
+            if acc.get("MEROSHARE_USER") == username:
+                acc["MEROSHARE_PASS"] = new_password
+                updated = True
+        
+        if updated:
+            with open("accounts.json", "w") as f:
+                json.dump(accounts, f, indent=4)
+            print(f"Successfully updated local accounts.json for {username}")
+            return True
+    except Exception as e:
+        print(f"Warning: Failed to update local accounts.json: {e}")
+    return False
+
+def handle_password_reset(page, account):
+    """
+    Handles the password change process when an expiry is detected.
+    """
+    username = account['MEROSHARE_USER']
+    old_password = account['MEROSHARE_PASS']
+    new_password = generate_new_password()
+    
+    print(f"[{username}] Starting automatic password reset...")
+    try:
+        # MeroShare change password page usually has these fields
+        # Using flexible selectors in case they change
+        page.wait_for_selector("input[placeholder='Old Password'], #oldPassword", timeout=10000)
+        
+        page.fill("input[placeholder='Old Password'], #oldPassword", old_password)
+        page.fill("input[placeholder='New Password'], #newPassword", new_password)
+        page.fill("input[placeholder='Confirm Password'], #confirmPassword", new_password)
+        
+        page.click("button:has-text('Change'), button:has-text('Update')")
+        
+        # Wait for toast message or redirection
+        try:
+            toast = page.wait_for_selector(".toast-success, .toast-message", timeout=10000)
+            toast_text = toast.inner_text().strip()
+            print(f"[{username}] Reset Result: {toast_text}")
+            
+            if "success" in toast_text.lower() or "successfully" in toast_text.lower():
+                # Notify User
+                msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
+                send_email_notification(account.get('EMAIL'), f"[MeroShare] Password Reset Successful", msg)
+                
+                # Update local file
+                update_local_account_password(username, new_password)
+                return True
+            else:
+                print(f"[{username}] Password reset reported failure: {toast_text}")
+        except:
+             # Fallback check: if we are no longer on change-password page and see dashboard
+             page.wait_for_timeout(3000)
+             if "change-password" not in page.url and (page.locator("text=My ASBA").is_visible() or "dashboard" in page.url):
+                 print(f"[{username}] Password reset appears successful (redirected).")
+                 msg = f"Your MeroShare password for {username} has been automatically reset.\n\nNew Password: {new_password}"
+                 send_email_notification(account.get('EMAIL'), f"[MeroShare] Password Reset Successful", msg)
+                 update_local_account_password(username, new_password)
+                 return True
+                 
+    except Exception as e:
+        print(f"[{username}] Error during password reset: {e}")
+        page.screenshot(path=f"debug_reset_fail_{username}.png")
+        
+    return False
 
 def fill_and_submit_form(page, account, company_name=None):
     """
@@ -343,6 +438,11 @@ def login(page, username, password, dp_name):
         page.wait_for_load_state('networkidle', timeout=15000)
         page.wait_for_timeout(2000) 
         
+        # Check for Password Expiry Redirect
+        if "change-password" in page.url or "changepassword" in page.url or page.locator("text=Change Password").is_visible():
+            print(f"[{username}] ⚠️ Password Expired / Change required detected.")
+            return "EXPIRED"
+
         if page.locator("text=My ASBA").is_visible():
             return True
         elif page.locator(".toast-message").is_visible():
@@ -410,22 +510,23 @@ def get_accounts():
     """
     Retrieves accounts from environment variable (JSON) or local file.
     """
+    accounts = []
     accounts_env = os.getenv("ACCOUNTS_JSON")
     if accounts_env:
         try:
-            return json.loads(accounts_env)
+            accounts = json.loads(accounts_env)
         except json.JSONDecodeError:
             print("Error: Error decoding ACCOUNTS_JSON environment variable.")
 
-    if os.path.exists("accounts.json"):
+    if not accounts and os.path.exists("accounts.json"):
         try:
             with open("accounts.json", "r") as f:
-                return json.load(f)
+                accounts = json.load(f)
         except json.JSONDecodeError:
             print("Error: Error decoding local accounts.json file.")
 
-    if os.getenv("MEROSHARE_USER"):
-        return [{
+    if not accounts and os.getenv("MEROSHARE_USER"):
+        accounts = [{
             "MEROSHARE_USER": os.getenv("MEROSHARE_USER"),
             "MEROSHARE_PASS": os.getenv("MEROSHARE_PASS"),
             "DP_NAME": os.getenv("DP_NAME"),
@@ -435,7 +536,7 @@ def get_accounts():
             "KITTA": os.getenv("KITTA", "10")
         }]
 
-    return []
+    return accounts
 
 def check_status(page, account):
     """
@@ -607,9 +708,8 @@ def check_status(page, account):
 
                 # Notification logic for final results
                 if "verified" in status_val and "unverified" not in status_val:
-                    msg = f"{target_ipo} has been applied successfully."
-                    print(f"[{username}] ✅ SUCCESS: {msg}")
-                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Verified!", f"Hi {username},\n\n{msg}")
+                    print(f"[{username}] ✅ SUCCESS: {target_ipo} is Verified. (Email skipped as per configuration)")
+                    # send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Verified!", f"Hi {username},\n\n{target_ipo} has been applied successfully.")
                 elif "rejected" in status_val or "insufficient" in remark_val or "balance" in remark_val:
                     msg = f"Your IPO ({target_ipo}) was rejected. REMARK: {remark_val}."
                     print(f"[{username}] ❌ REJECTED: {msg}")
@@ -623,14 +723,15 @@ def check_status(page, account):
                             print(f"[{username}] Found Reapply/Edit button. Clicking...")
                             reapply_btn.click()
                             page.wait_for_load_state('networkidle')
+                            # fill_and_submit_form handles its own success/failure notifications
                             fill_and_submit_form(page, account, company_name=target_ipo)
                             page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
                             continue
                         else:
-                            print(f"[{username}] No reapply button found. Sending notification.")
-                            send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}\n\nNo automatic reapply button found.")
+                            print(f"[{username}] No reapply button found for rejected IPO. Ending silently.")
+                            # No notification sent when reapply enabled but button missing (silent end)
                     else:
-                        print(f"[{username}] Auto-reapply disabled. Sending notification.")
+                        print(f"[{username}] Auto-reapply disabled. Sending rejection notification.")
                         send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}\n\nTo reapply, please topup and the automation will retry in the next scheduled run.")
                 else:
                     print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
@@ -673,10 +774,18 @@ def run_automation():
                 MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
-                    if login(page, username, account['MEROSHARE_PASS'], account['DP_NAME']):
+                    login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
+                    if login_result is True:
                         print(f"Login Successful!")
                         logged_in = True
                         break
+                    elif login_result == "EXPIRED":
+                        if handle_password_reset(page, account):
+                            print(f"[{username}] Password successfully reset and logged in.")
+                            logged_in = True
+                        else:
+                            print(f"[{username}] Password reset failed.")
+                        break # Don't retry login if expired/reset attempted
                     else:
                         print(f"Error: [{username}] Login failed (Attempt {attempt}). Retrying...")
                         page.reload()
@@ -727,8 +836,13 @@ def run_status_check():
                 MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
-                    if login(page, username, account['MEROSHARE_PASS'], account['DP_NAME']):
+                    login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
+                    if login_result is True:
                         logged_in = True
+                        break
+                    elif login_result == "EXPIRED":
+                        if handle_password_reset(page, account):
+                            logged_in = True
                         break
                     else:
                         page.reload()
