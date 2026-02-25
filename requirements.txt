@@ -1,3 +1,2 @@
 playwright
 python-dotenv
-paho-mqtt

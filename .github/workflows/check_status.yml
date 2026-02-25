@@ -2,12 +2,11 @@ name: IPO Status Watchdog
 
 on:
   schedule:
-    # Apply runs at 11:30 AM NPT (05:45 UTC)
-    # Check 1: 7h later  → 6:30 PM NPT  = 12:45 UTC
+    # Check 1: EXACT 6:30 PM NPT (Notify Only)
     - cron: "45 12 * * *"
-    # Check 2: 14h later → 1:30 AM NPT  = 19:45 UTC
+    # Check 2: EXACT 1:30 AM NPT (Notify Only)
     - cron: "45 19 * * *"
-    # Check 3: 21h later → 8:30 AM NPT  = 02:45 UTC
+    # Check 3: EXACT 8:30 AM NPT (Notify Only)
     - cron: "45 2 * * *"
   workflow_dispatch:
 
@@ -31,9 +30,11 @@ jobs:
       - name: Run Status Watchdog
         env:
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
-          MQTT_BROKER: ${{ secrets.MQTT_BROKER }}
-          MQTT_PORT: ${{ secrets.MQTT_PORT }}
-          MQTT_BASE_TOPIC: ${{ secrets.MQTT_BASE_TOPIC }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
           RUN_MODE: "check_status"
+          AUTO_REAPPLY: "false"
         run: |
           python main.py
