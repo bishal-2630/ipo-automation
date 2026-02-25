@@ -428,9 +428,7 @@ def apply_ipo(page, account):
         print(f"[{username}] Targeted IPO: {clicked_ipo}")
         fill_and_submit_form(page, account, company_name=clicked_ipo)
     else:
-        msg = f"No 'Ordinary Shares' found to apply for {username}."
-        print(f"[{username}] {msg}")
-        send_email_notification(account.get('EMAIL'), f"[MeroShare] No IPO found for {username}", msg)
+        print(f"[{username}] No 'Ordinary Shares' found to apply. Skipping silently.")
         page.screenshot(path=f"debug_asba_{username}.png")
 
 def get_accounts():
