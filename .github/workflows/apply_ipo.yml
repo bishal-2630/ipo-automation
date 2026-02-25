@@ -21,15 +21,15 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install -r requirements.txt
-          pip install paho-mqtt
           playwright install chromium
 
       - name: Run IPO Automation Script
         env:
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
-          MQTT_BROKER: ${{ secrets.MQTT_BROKER }}
-          MQTT_PORT: ${{ secrets.MQTT_PORT }}
-          MQTT_BASE_TOPIC: ${{ secrets.MQTT_BASE_TOPIC }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
           RUN_MODE: "apply"
         run: python main.py
 

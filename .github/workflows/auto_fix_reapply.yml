@@ -1,17 +1,19 @@
-name: IPO Status Watchdog
+name: IPO Auto-Fix (Reapply)
 
 on:
   schedule:
-    # Check 1: EXACT 6:30 PM NPT (Notify Only)
-    - cron: "45 12 * * *"
-    # Check 2: EXACT 1:30 AM NPT (Notify Only)
-    - cron: "45 19 * * *"
-    # Check 3: EXACT 8:30 AM NPT (Notify Only)
-    - cron: "45 2 * * *"
+    # Reapply 1: EXACT 7:30 PM NPT (1h after Notify)
+    - cron: "45 13 * * *"
+    # Reapply 2: EXACT 2:30 AM NPT (1h after Notify)
+    - cron: "45 20 * * *"
+    # Reapply 3: EXACT 9:30 AM NPT (1h after Notify)
+    - cron: "45 3 * * *"
+    # Reapply 4: EXACT 12:30 PM NPT (1h after Morning Apply)
+    - cron: "45 6 * * *"
   workflow_dispatch:
 
 jobs:
-  check-ipo-status:
+  auto-fix-ipo:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -27,7 +29,7 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium
 
-      - name: Run Status Watchdog
+      - name: Run Auto-Reapply
         env:
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
@@ -35,6 +37,13 @@ jobs:
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           RUN_MODE: "check_status"
-          AUTO_REAPPLY: "false"
+          AUTO_REAPPLY: "true"
         run: |
           python main.py
+
+      - name: Upload Screenshot on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-reapply
+          path: debug_*.png

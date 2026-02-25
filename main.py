@@ -3,43 +3,12 @@ from dotenv import load_dotenv
 import os
 import time
 import json
-import paho.mqtt.client as mqtt
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 # Load environment variables
 load_dotenv()
-
-def send_mqtt_notification(message, topic_suffix=None):
-    """
-    Sends a notification via MQTT to EMQX broker (broker.emqx.io).
-    """
-    broker = os.getenv("MQTT_BROKER") or "broker.emqx.io"
-    port = int(os.getenv("MQTT_PORT") or 1883)
-    base_topic = os.getenv("MQTT_BASE_TOPIC") or "mero_share/status"
-
-    topic = f"{base_topic}/{topic_suffix}" if topic_suffix else base_topic
-
-    try:
-        # Use newer CallbackAPIVersion.VERSION2 for paho-mqtt
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-
-        # Support for SSL (Port 8883 or 8084 requires TLS in script)
-        if port in [8883, 8084]:
-            client.tls_set()
-
-        username = os.getenv("MQTT_USERNAME")
-        password = os.getenv("MQTT_PASSWORD")
-        if username and password:
-            client.username_pw_set(username, password)
-
-        client.connect(broker, port, 60)
-        client.publish(topic, message)
-        client.disconnect()
-        print(f"MQTT Notification Sent to {topic}")
-    except Exception as e:
-        print(f"Warning: Failed to send MQTT notification: {e}")
 
 def send_email_notification(to_email, subject, message):
     """
@@ -54,6 +23,7 @@ def send_email_notification(to_email, subject, message):
     smtp_port = int(os.getenv("SMTP_PORT") or 587)
 
     if not (sender_email and sender_password):
+        print("Warning: Skipping email notification (Sender credentials missing in .env)")
         return
 
     try:
@@ -70,6 +40,228 @@ def send_email_notification(to_email, subject, message):
         print(f"Email Notification Sent to {to_email}")
     except Exception as e:
         print(f"Warning: Failed to send email notification to {to_email}: {e}")
+
+def fill_and_submit_form(page, account, company_name=None):
+    """
+    Fills the IPO application form and submits it with TPIN.
+    Can be called from initial application or status check (Edit mode).
+    """
+    username = account['MEROSHARE_USER']
+    tpin = account.get('TPIN')
+    bank_name = account.get('BANK_NAME')
+
+    print(f"[{username}] Filling application form...")
+    # Wait for the form to actually be visible
+    page.wait_for_timeout(2000)
+
+    print(f"Selecting Bank: {bank_name}...")
+    try:
+        page.wait_for_selector("#selectBank", timeout=20000)
+
+        # BRUTE FORCE JS SELECTION
+        selected_bank = page.evaluate(f"""
+            (bankName) => {{
+                const select = document.querySelector('#selectBank');
+                if (!select) return "NOT_FOUND";
+                const options = Array.from(select.options);
+                const target = bankName.toLowerCase().trim();
+                const match = options.find(o => o.innerText.toLowerCase().trim().includes(target));
+                if (match) {{
+                    select.value = match.value;
+                    select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    select.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    return match.innerText.trim();
+                }}
+                return "FAIL: " + options.map(o => o.innerText.trim()).join(', ');
+            }}
+        """, bank_name)
+
+        if "FAIL" in selected_bank:
+             raise Exception(f"Bank selection failed: {selected_bank}")
+        print(f"[{username}] Selected Bank: {selected_bank}")
+
+        page.wait_for_timeout(1500) # Wait for Branch to populate
+
+        print(f"[{username}] Selecting Branch...")
+        selected_branch = page.evaluate("""
+            () => {
+                const el = document.querySelector('#selectBranch');
+                if (!el) return "NOT_FOUND";
+                if (el.tagName === 'SELECT') {
+                    const options = Array.from(el.options);
+                    const validOptions = options.filter(o => !o.innerText.toLowerCase().includes('choose') && o.innerText.trim() !== '');
+                    if (validOptions.length > 0) {
+                        el.value = validOptions[0].value;
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        return "SELECT: " + validOptions[0].innerText.trim();
+                    }
+                    return "SELECT: NONE_FOUND";
+                }
+                if (el.tagName === 'INPUT') return "INPUT_FIELD";
+                return "UNKNOWN_TAG: " + el.tagName;
+            }
+        """)
+
+        if selected_branch == "INPUT_FIELD":
+             page.click("#selectBranch")
+             page.wait_for_timeout(500)
+             page.keyboard.press("ArrowDown")
+             page.wait_for_timeout(500)
+             page.keyboard.press("Enter")
+             print(f"[{username}] Selected Branch via keyboard interaction")
+        elif "NOT_FOUND" in selected_branch or "NONE_FOUND" in selected_branch:
+             print(f"[{username}] Branch selection auto-skipped: {selected_branch}")
+        else:
+             print(f"[{username}] {selected_branch}")
+
+        page.wait_for_timeout(1000)
+
+        print(f"[{username}] Selecting Bank Account Number...")
+        page.wait_for_selector("#accountNumber", timeout=10000)
+        account_selected = page.evaluate("""
+            () => {
+                const select = document.querySelector('#accountNumber');
+                if (!select) return "NOT_FOUND";
+                const options = Array.from(select.options);
+                const validOptions = options.filter(o => o.innerText.trim() !== '' && !o.innerText.toLowerCase().includes('choose'));
+                if (validOptions.length > 0) {
+                    select.value = validOptions[0].value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    select.dispatchEvent(new Event('input', { bubbles: true }));
+                    return validOptions[0].innerText.trim();
+                }
+                return "NONE_FOUND";
+            }
+        """)
+        print(f"[{username}] Selected Account: {account_selected}")
+
+    except Exception as e:
+        print(f"[{username}] Bank/Branch/Account selection failed. Diagnostics:")
+        page.screenshot(path=f"debug_bank_fail_{username}.png")
+        raise e
+
+    print(f"[{username}] Filling Kitta and CRN with validation triggers...")
+    detected_min_kitta = 10
+    if not company_name:
+        company_name = "Unknown"
+        try:
+            company_elem = page.locator(".company-name, .issue-name, h4.modal-title").first
+            if company_elem.is_visible():
+                company_name = company_elem.inner_text().strip()
+                print(f"[{username}] Company (Detected): {company_name}")
+        except: pass
+
+    try:
+        min_kitta_value = page.evaluate("""
+            () => {
+                const labels = Array.from(document.querySelectorAll('label, span, td, th, div'));
+                const minLabel = labels.find(el => {
+                    const text = el.innerText.toLowerCase().trim();
+                    return text === 'minimum unit' || text === 'minimum quantity' || text === 'min unit' || 
+                           text.includes('minimum unit:') || text.includes('minimum quantity:');
+                });
+                if (minLabel) {
+                    let parent = minLabel.parentElement;
+                    let textContent = parent.innerText;
+                    let matches = textContent.match(/\\d+/g);
+                    if (matches && matches.length > 0) return parseInt(matches[matches.length - 1]);
+                    if (minLabel.nextElementSibling) {
+                        const nextText = minLabel.nextElementSibling.innerText;
+                        const matchNext = nextText.match(/\\d+/);
+                        if (matchNext) return parseInt(matchNext[0]);
+                    }
+                }
+                return null;
+            }
+        """)
+        if min_kitta_value:
+            detected_min_kitta = int(min_kitta_value)
+            print(f"[{username}] Detected Minimum Kitta (on page): {detected_min_kitta}")
+
+        if "RELIANCE" in company_name.upper() or "NIFRA" in company_name.upper():
+            if detected_min_kitta < 50:
+                 detected_min_kitta = max(detected_min_kitta, 50)
+    except Exception as e:
+        print(f"Warning: [{username}] Could not detect minimum kitta: {e}")
+
+    user_kitta = int(account.get('KITTA', '10'))
+    final_kitta = max(user_kitta, detected_min_kitta)
+    if final_kitta != user_kitta:
+        print(f"[{username}] Adjusting Kitta from {user_kitta} to {final_kitta} based on requirements.")
+
+    kitta_loc = page.locator("#appliedKitta")
+    kitta_loc.clear()
+    kitta_loc.type(str(final_kitta))
+    page.keyboard.press("Tab")
+    page.wait_for_timeout(500)
+
+    crn_loc = page.locator("#crnNumber")
+    crn_loc.clear()
+    crn_loc.type(account['CRN'])
+    page.keyboard.press("Tab")
+    page.wait_for_timeout(500)
+
+    print(f"[{username}] Waiting for amount calculation...")
+    try:
+        page.wait_for_function("document.querySelector('#amount') && document.querySelector('#amount').value !== '' && document.querySelector('#amount').value !== '0'", timeout=5000)
+        amount = page.locator("#amount").input_value()
+        print(f"[{username}] Calculated Amount: {amount}")
+    except:
+        print(f"Warning: [{username}] Amount was not calculated.")
+
+    page.uncheck("#disclaimer")
+    page.wait_for_timeout(300)
+    page.check("#disclaimer")
+    page.mouse.click(0, 0)
+    page.wait_for_timeout(1000)
+
+    print(f"Form filled. Checking Proceed button state...")
+    proceed_btn = page.locator("button:has-text('Proceed')")
+    try:
+        page.wait_for_function("document.querySelector('button:has-text(\"Proceed\")').disabled === false", timeout=5000)
+    except: pass
+    proceed_btn.click()
+
+    if tpin:
+        print(f"[{username}] Entering TPIN...")
+        page.wait_for_selector("#transactionPIN", timeout=10000)
+        page.locator("#transactionPIN").click()
+        page.locator("#transactionPIN").clear()
+        page.locator("#transactionPIN").type(tpin)
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(1000)
+        print(f"[{username}] Submitting application...")
+
+        apply_btn = page.locator(".modal-footer button:has-text('Apply')").first
+        if not apply_btn.is_visible():
+            apply_btn = page.locator("button:has-text('Apply')").first
+        apply_btn.click()
+
+        try:
+            toast = page.wait_for_selector(".toast-success, .toast-message", timeout=10000)
+            toast_text = toast.inner_text().strip()
+            print(f"[{username}] Result: {toast_text}")
+
+            if "success" in toast_text.lower() or "successfully" in toast_text.lower():
+                print(f"Application SUCCESS!")
+                msg = f"{company_name} has been applied successfully."
+                send_email_notification(account.get('EMAIL'), f"[MeroShare] Success: {company_name}", f"Hi {username},\n\n{msg}")
+            else:
+                error_msg = toast_text
+                if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
+                    msg = f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
+                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Failed: Insufficient Balance", f"Hi {username},\n\n{msg}")
+                else:
+                    msg = f"❌ FAILED: {error_msg} - {username}"
+                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Error: Application Failed", f"Hi {username},\n\n{msg}")
+        except:
+             if not page.is_visible("#transactionPIN"):
+                 print(f"[{username}] Application submitted successfully (modal closed).")
+             else:
+                 print(f"Error: [{username}] Application submission failed (modal still open).")
+    else:
+        print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
 
 def login(page, username, password, dp_name):
     """
@@ -170,16 +362,10 @@ def apply_ipo(page, account):
     Applies for IPO for a logged-in session.
     """
     username = account['MEROSHARE_USER']
-    crn = account['CRN']
-    tpin = account['TPIN']
-    bank_name = account['BANK_NAME']
-    kitta = account.get('KITTA', '10')
-
     print(f"[{username}] Navigating to My ASBA...")
     page.wait_for_selector(".nav-link:has-text('My ASBA')")
     page.click(".nav-link:has-text('My ASBA')")
 
-    # NEW: Move explicitly to 'Apply for Issue' tab
     print(f"[{username}] Clicking 'Apply for Issue' tab...")
     try:
         page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
@@ -187,347 +373,40 @@ def apply_ipo(page, account):
         page.wait_for_load_state('networkidle')
     except Exception as e:
         print(f"Warning: [{username}] Could not find 'Apply for Issue' tab: {e}")
-        page.screenshot(path=f"debug_tab_fail_{username}.png")
 
     print(f"[{username}] Looking for available IPOs...")
-    target_button = None
-    try:
-        # Wait for either buttons or a 'No Data' message
-        page.wait_for_timeout(3000) 
+    clicked_ipo = page.evaluate("""
+        () => {
+            const candidates = Array.from(document.querySelectorAll('tr, .row, div[class*="row"], .list-item, div[class*="entry"]'));
+            for (const row of candidates) {
+                const rowText = row.innerText.toLowerCase();
+                const btn = row.querySelector('button');
+                if (!btn || !btn.innerText.toLowerCase().includes('apply')) continue;
 
-        # Robust row detection: Matches both table rows (tr) and list items (div/li)
-        # Filters for "Ordinary Shares" and avoids Debentures/Mutual Funds
-        target_button = page.evaluate("""
-            () => {
-                // Look for elements that likely represent a row or entry
-                const candidates = Array.from(document.querySelectorAll('tr, .row, div[class*="row"], .list-item, div[class*="entry"]'));
+                const isOrdinary = rowText.includes('ordinary shares') || rowText.includes('ordinary share');
+                const isDebenture  = rowText.includes('debenture') || rowText.includes('debentures');
+                const isBond       = rowText.includes('bond');
+                const isMutualFund = rowText.includes('mutual fund');
+                const isPreference = rowText.includes('preference share');
                 
-                for (const row of candidates) {
-                    const rowText = row.innerText.toLowerCase();
-                    const btn = row.querySelector('button');
-                    
-                    // Only proceed if the row has an Apply button
-                    if (!btn || !btn.innerText.toLowerCase().includes('apply')) continue;
-
-                    // STRICT: Must explicitly say "ordinary shares"
-                    const isOrdinary = rowText.includes('ordinary shares') || rowText.includes('ordinary share');
-                    
-                    // STRICT: Block anything that looks like non-equity
-                    const isDebenture  = rowText.includes('debenture') || rowText.includes('debentures');
-                    const isBond       = rowText.includes('bond');
-                    const isMutualFund = rowText.includes('mutual fund');
-                    const isPreference = rowText.includes('preference share');
-                    
-                    if (isOrdinary && !isDebenture && !isBond && !isMutualFund && !isPreference) {
-                        btn.click();
-                        return "CLICKED_ORDINARY";
-                    }
+                if (isOrdinary && !isDebenture && !isBond && !isMutualFund && !isPreference) {
+                    const companyName = row.innerText.split(/[\\n-]/)[0].trim();
+                    btn.click();
+                    return companyName;
                 }
-                
-                // Final fallback: Look for ANY button that has "Apply" in a container with "Ordinary Shares"
-                const allButtons = Array.from(document.querySelectorAll('button')).filter(b => b.innerText.toLowerCase().includes('apply'));
-                for (const b of allButtons) {
-                    const container = b.closest('div, tr, section');
-                    if (container && container.innerText.toLowerCase().includes('ordinary share')) {
-                        b.click();
-                        return "CLICKED_FALLBACK";
-                    }
-                }
-
-                return null;
             }
-        """)
+            return null;
+        }
+    """)
 
-        if not target_button:
-            msg = f"No 'Ordinary Shares' found or all available issues are Debentures/Mutual Funds for {username}."
-            print(f"[{username}] {msg}")
-            # send_mqtt_notification(f"⚠️ {msg}", username)  <-- Silenced to follow "Success/Balance" only rule
-    except Exception as e:
-        print(f"Warning: [{username}] Error scanning for buttons: {e}")
-
-    if not target_button:
-        print(f"Error: [{username}] No suitable IPOs found to apply. (Check debug_asba_{username}.png)")
-        page.screenshot(path=f"debug_asba_{username}.png")
-        return
-
-    print(f"[{username}] Filling application form...")
-
-    # Wait for the form to actually be visible
-    page.wait_for_timeout(2000) 
-
-    print(f"Selecting Bank: {bank_name}...")
-    try:
-        page.wait_for_selector("#selectBank", timeout=20000)
-
-        # BRUTE FORCE JS SELECTION: This finds the option by text and forces selection/events
-        # It handles partial, case-insensitive, and stripped matching
-        selected_bank = page.evaluate(f"""
-            (bankName) => {{
-                const select = document.querySelector('#selectBank');
-                if (!select) return "NOT_FOUND";
-                const options = Array.from(select.options);
-                const target = bankName.toLowerCase().trim();
-                const match = options.find(o => o.innerText.toLowerCase().trim().includes(target));
-                if (match) {{
-                    select.value = match.value;
-                    select.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    select.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    return match.innerText.trim();
-                }}
-                return "FAIL: " + options.map(o => o.innerText.trim()).join(', ');
-            }}
-        """, bank_name)
-
-        if "FAIL" in selected_bank:
-             raise Exception(f"Bank selection failed: {selected_bank}")
-        print(f"[{username}] Selected Bank: {selected_bank}")
-
-        page.wait_for_timeout(1500) # Wait for Branch to populate
-
-        # BRUTE FORCE BRANCH SELECTION: Handles both SELECT and INPUT types
-        print(f"[{username}] Selecting Branch...")
-        selected_branch = page.evaluate("""
-            () => {
-                const el = document.querySelector('#selectBranch');
-                if (!el) return "NOT_FOUND";
-                
-                // If it's a standard SELECT
-                if (el.tagName === 'SELECT') {
-                    const options = Array.from(el.options);
-                    const validOptions = options.filter(o => !o.innerText.toLowerCase().includes('choose') && o.innerText.trim() !== '');
-                    if (validOptions.length > 0) {
-                        el.value = validOptions[0].value;
-                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                        el.dispatchEvent(new Event('input', { bubbles: true }));
-                        return "SELECT: " + validOptions[0].innerText.trim();
-                    }
-                    return "SELECT: NONE_FOUND";
-                }
-                
-                // If it's an INPUT (likely an autocomplete or facade)
-                if (el.tagName === 'INPUT') {
-                    // We'll return a signal to handle it via Playwright keyboard
-                    return "INPUT_FIELD";
-                }
-                
-                return "UNKNOWN_TAG: " + el.tagName;
-            }
-        """)
-
-        if selected_branch == "INPUT_FIELD":
-             # Handle input-based branch selection via keyboard
-             page.click("#selectBranch")
-             page.wait_for_timeout(500)
-             page.keyboard.press("ArrowDown")
-             page.wait_for_timeout(500)
-             page.keyboard.press("Enter")
-             print(f"[{username}] Selected Branch via keyboard interaction")
-        elif "NOT_FOUND" in selected_branch or "NONE_FOUND" in selected_branch:
-             print(f"[{username}] Branch selection auto-skipped: {selected_branch}")
-        else:
-             print(f"[{username}] {selected_branch}")
-
-        page.wait_for_timeout(1000) 
-
-        # NEW: Handle Bank Account Number selection (identifed as 'invalid' field in diagnostics)
-        print(f"[{username}] Selecting Bank Account Number...")
-        page.wait_for_selector("#accountNumber", timeout=10000)
-        account_selected = page.evaluate("""
-            () => {
-                const select = document.querySelector('#accountNumber');
-                if (!select) return "NOT_FOUND";
-                const options = Array.from(select.options);
-                const validOptions = options.filter(o => o.innerText.trim() !== '' && !o.innerText.toLowerCase().includes('choose'));
-                if (validOptions.length > 0) {
-                    select.value = validOptions[0].value;
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                    select.dispatchEvent(new Event('input', { bubbles: true }));
-                    return validOptions[0].innerText.trim();
-                }
-                return "NONE_FOUND";
-            }
-        """)
-        print(f"[{username}] Selected Account: {account_selected}")
-
-    except Exception as e:
-        print(f"[{username}] Bank/Branch/Account selection failed. Diagnostics:")
-        page.screenshot(path=f"debug_bank_fail_{username}.png")
-        raise e
-
-    # Use exact IDs from diagnostics for Kitta and CRN
-    print(f"[{username}] Filling Kitta and CRN with validation triggers...")
-
-    # NEW: Detect Minimum Kitta from the page
-    detected_min_kitta = 10
-    company_name = "Unknown"
-    try:
-        # Try to find the company name
-        company_elem = page.locator(".company-name, .issue-name, h4.modal-title").first
-        if company_elem.is_visible():
-            company_name = company_elem.inner_text().strip()
-            print(f"[{username}] Company: {company_name}")
-
-        # Try to find Minimum Unit on the page
-        # MeroShare usually has labels like 'Minimum Unit', 'Minimum quantity', or 'Min Unit'
-        min_kitta_value = page.evaluate("""
-            () => {
-                const labels = Array.from(document.querySelectorAll('label, span, td, th, div'));
-                const minLabel = labels.find(el => {
-                    const text = el.innerText.toLowerCase().trim();
-                    return text === 'minimum unit' || text === 'minimum quantity' || text === 'min unit' || 
-                           text.includes('minimum unit:') || text.includes('minimum quantity:');
-                });
-                if (minLabel) {
-                    // Try several strategies to find the value
-                    
-                    // 1. Check parent container for numbers
-                    let parent = minLabel.parentElement;
-                    let textContent = parent.innerText;
-                    let matches = textContent.match(/\\d+/g);
-                    if (matches && matches.length > 0) {
-                        // Avoid picking up labels that start with numbers, look for the 'value' part
-                        // Usually it's the last number in the group or the one following the label
-                        return parseInt(matches[matches.length - 1]);
-                    }
-                    
-                    // 2. Check next sibling
-                    if (minLabel.nextElementSibling) {
-                        const nextText = minLabel.nextElementSibling.innerText;
-                        const matchNext = nextText.match(/\\d+/);
-                        if (matchNext) return parseInt(matchNext[0]);
-                    }
-                }
-                return null;
-            }
-        """)
-        if min_kitta_value:
-            detected_min_kitta = int(min_kitta_value)
-            print(f"[{username}] Detected Minimum Kitta (on page): {detected_min_kitta}")
-
-        # Try to find Share Price for logging
-        share_price = page.evaluate("""
-            () => {
-                const labels = Array.from(document.querySelectorAll('label, span, td, th'));
-                const priceLabel = labels.find(el => el.innerText.toLowerCase().includes('share price'));
-                if (priceLabel) {
-                    const parentText = priceLabel.parentElement.innerText;
-                    const match = parentText.match(/\\d+(\\.\\d+)?/);
-                    if (match) return match[0];
-                }
-                return null;
-            }
-        """)
-        if share_price:
-            print(f"[{username}] Share Price: {share_price}")
-
-        # Special handling for known high-kitta companies if detection fails or for extra safety
-        if "RELIANCE" in company_name.upper() or "NIFRA" in company_name.upper():
-            if detected_min_kitta < 50:
-                 print(f"[{username}] Special case: {company_name} detected. Ensuring at least 50 kitta.")
-                 detected_min_kitta = max(detected_min_kitta, 50)
-
-    except Exception as e:
-        print(f"Warning: [{username}] Could not detect minimum kitta: {e}")
-
-    # Determine final kitta to apply
-    user_kitta = int(account.get('KITTA', '10'))
-    final_kitta = max(user_kitta, detected_min_kitta)
-
-    if final_kitta != user_kitta:
-        print(f"[{username}] Adjusting Kitta from {user_kitta} to {final_kitta} based on requirements.")
-
-    # Kitta
-    kitta_loc = page.locator("#appliedKitta")
-    kitta_loc.clear()
-    kitta_loc.type(str(final_kitta))
-    page.keyboard.press("Tab") # Trigger calculation
-    page.wait_for_timeout(500)
-
-    # CRN
-    crn_loc = page.locator("#crnNumber")
-    crn_loc.clear()
-    crn_loc.type(account['CRN'])
-    page.keyboard.press("Tab") # Trigger potential field-level validation
-    page.wait_for_timeout(500)
-
-    # NEW: Wait for Amount to populate (it should be non-empty and non-zero)
-    print(f"[{username}] Waiting for amount calculation...")
-    try:
-        # Give it a few seconds to calculate
-        page.wait_for_function("document.querySelector('#amount') && document.querySelector('#amount').value !== '' && document.querySelector('#amount').value !== '0'", timeout=5000)
-        amount = page.locator("#amount").input_value()
-        print(f"[{username}] Calculated Amount: {amount}")
-    except:
-        print(f"Warning: [{username}] Amount was not calculated. Form might be invalid.")
-        # Check for visible error messages
-        errors = page.locator(".text-danger").all_inner_texts()
-        if errors:
-            print(f"[{username}] Form Errors Found: {errors}")
-
-    # Checkbox jiggle (ID is disclaimer)
-    page.uncheck("#disclaimer")
-    page.wait_for_timeout(300)
-    page.check("#disclaimer")
-
-    # Final click to blur everything
-    page.mouse.click(0, 0)
-    page.wait_for_timeout(1000)
-
-    print(f"Form filled. Checking Proceed button state...")
-    proceed_btn = page.locator("button:has-text('Proceed')")
-
-    # Wait for natural enabled state if possible
-    try:
-        page.wait_for_function("document.querySelector('button:has-text(\"Proceed\")').disabled === false", timeout=5000)
-    except:
-        pass
-
-    proceed_btn.click()
-
-    if tpin:
-        print(f"[{username}] Entering TPIN...")
-        page.wait_for_selector("#transactionPIN", timeout=10000)
-
-        page.locator("#transactionPIN").click()
-        page.locator("#transactionPIN").clear()
-        page.locator("#transactionPIN").type(tpin)
-        page.keyboard.press("Tab") 
-
-        page.wait_for_timeout(1000)
-        print(f"[{username}] Submitting application...")
-
-        # Click Apply
-        apply_btn = page.locator(".modal-footer button:has-text('Apply')").first
-        if not apply_btn.is_visible():
-            apply_btn = page.locator("button:has-text('Apply')").first
-
-        apply_btn.click()
-
-        try:
-            # Wait for success toast
-            toast = page.wait_for_selector(".toast-success, .toast-message", timeout=10000)
-            toast_text = toast.inner_text().strip()
-            print(f"[{username}] Result: {toast_text}")
-
-            if "success" in toast_text.lower() or "successfully" in toast_text.lower():
-                print(f"Application SUCCESS!")
-                msg = f"{company_name} has been applied successfully."
-                send_mqtt_notification(msg, username)
-                # STRICT: Email on success
-                send_email_notification(account.get('EMAIL'), f"[MeroShare] Success: {company_name}", f"Hi {username},\n\n{msg}")
-            else:
-                error_msg = toast_text
-                print(f"Application Result: {error_msg}")
-                # STRICT: Don't email on generic failures/errors here, only on successful submission.
-                # Insufficient balance is usually caught in 'check_status' later.
-                send_mqtt_notification(f"❌ FAILED: {error_msg} - {username}", username)
-        except:
-             if not page.is_visible("#transactionPIN"):
-                 print(f"[{username}] Application submitted successfully (modal closed).")
-             else:
-                 print(f"Error: [{username}] Application submission failed (modal still open).")
+    if clicked_ipo:
+        print(f"[{username}] Targeted IPO: {clicked_ipo}")
+        fill_and_submit_form(page, account, company_name=clicked_ipo)
     else:
-        print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
+        msg = f"No 'Ordinary Shares' found to apply for {username}."
+        print(f"[{username}] {msg}")
+        send_email_notification(account.get('EMAIL'), f"[MeroShare] No IPO found for {username}", msg)
+        page.screenshot(path=f"debug_asba_{username}.png")
 
 def get_accounts():
     """
@@ -666,6 +545,12 @@ def check_status(page, account):
                     print(f"[{username}] ⏳ {target_ipo} not found or has no available action.")
                     continue
 
+                if clicked_info.get('mode', '').lower() == 'edit':
+                    print(f"[{username}] 'Edit' mode detected from list view. Filling form...")
+                    fill_and_submit_form(page, account, company_name=target_ipo)
+                    page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                    continue
+
                 page.wait_for_load_state('networkidle')
                 page.wait_for_timeout(4000)
 
@@ -726,15 +611,29 @@ def check_status(page, account):
                 if "verified" in status_val and "unverified" not in status_val:
                     msg = f"{target_ipo} has been applied successfully."
                     print(f"[{username}] ✅ SUCCESS: {msg}")
-                    send_mqtt_notification(msg, username)
-                    # STRICT: Send confirmed success status
                     send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Verified!", f"Hi {username},\n\n{msg}")
                 elif "rejected" in status_val or "insufficient" in remark_val or "balance" in remark_val:
-                    msg = f"Your IPO ({target_ipo}) has not been applied due to insufficient balance. Please topup amount and try again."
+                    msg = f"Your IPO ({target_ipo}) was rejected. REMARK: {remark_val}."
                     print(f"[{username}] ❌ REJECTED: {msg}")
-                    send_mqtt_notification(msg, username)
-                    # STRICT: Send late-failure due to balance
-                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}")
+
+                    auto_reapply_enabled = os.getenv("AUTO_REAPPLY", "false").lower() == "true"
+                    
+                    if auto_reapply_enabled:
+                        print(f"[{username}] Auto-reapply enabled. Looking for button...")
+                        reapply_btn = page.locator("button:has-text('Edit'), button:has-text('Re-Apply'), button:has-text('Reapply')").first
+                        if reapply_btn.is_visible():
+                            print(f"[{username}] Found Reapply/Edit button. Clicking...")
+                            reapply_btn.click()
+                            page.wait_for_load_state('networkidle')
+                            fill_and_submit_form(page, account, company_name=target_ipo)
+                            page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                            continue
+                        else:
+                            print(f"[{username}] No reapply button found. Sending notification.")
+                            send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}\n\nNo automatic reapply button found.")
+                    else:
+                        print(f"[{username}] Auto-reapply disabled. Sending notification.")
+                        send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}\n\nTo reapply, please topup and the automation will retry in the next scheduled run.")
                 else:
                     print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
 
@@ -759,7 +658,6 @@ def run_automation():
 
     count = len(accounts)
     print(f"Found {count} account(s) to process.")
-    # Silenced global start notifications for main branch
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
@@ -799,7 +697,6 @@ def run_automation():
 
         browser.close()
         print("\nAll accounts processed.")
-        # Silenced global end notifications for main branch
 
 
 def run_status_check():
