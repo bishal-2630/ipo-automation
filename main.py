@@ -366,38 +366,63 @@ def apply_ipo(page, account):
     page.wait_for_selector(".nav-link:has-text('My ASBA')")
     page.click(".nav-link:has-text('My ASBA')")
 
-    print(f"[{username}] Clicking 'Apply for Issue' tab...")
     try:
         page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
         page.click("a:has-text('Apply for Issue')")
-        page.wait_for_load_state('networkidle')
     except Exception as e:
         print(f"Warning: [{username}] Could not find 'Apply for Issue' tab: {e}")
 
-    print(f"[{username}] Looking for available IPOs...")
-    clicked_ipo = page.evaluate("""
-        () => {
-            const candidates = Array.from(document.querySelectorAll('tr, .row, div[class*="row"], .list-item, div[class*="entry"]'));
-            for (const row of candidates) {
-                const rowText = row.innerText.toLowerCase();
-                const btn = row.querySelector('button');
-                if (!btn || !btn.innerText.toLowerCase().includes('apply')) continue;
+    print(f"[{username}] Waiting for IPO list to load...")
+    page.wait_for_timeout(5000) # Increased wait for MeroShare's slow table
 
-                const isOrdinary = rowText.includes('ordinary shares') || rowText.includes('ordinary share');
-                const isDebenture  = rowText.includes('debenture') || rowText.includes('debentures');
-                const isBond       = rowText.includes('bond');
-                const isMutualFund = rowText.includes('mutual fund');
-                const isPreference = rowText.includes('preference share');
+    # Try up to 2 times with a refresh in between if nothing found
+    for attempt in range(2):
+        clicked_ipo = page.evaluate("""
+            () => {
+                // Find all possible row containers
+                const containers = Array.from(document.querySelectorAll('tr, .row, .list-item, .entry-list-item'));
                 
-                if (isOrdinary && !isDebenture && !isBond && !isMutualFund && !isPreference) {
-                    const companyName = row.innerText.split(/[\\n-]/)[0].trim();
-                    btn.click();
-                    return companyName;
+                for (const row of containers) {
+                    const text = row.innerText.toLowerCase();
+                    // Find any clickable 'Apply' element (button or link)
+                    const clickable = row.querySelector('button, a.btn, a[class*="btn"]');
+                    if (!clickable) continue;
+                    
+                    const label = clickable.innerText.toLowerCase().trim();
+                    if (!label.includes('apply')) continue;
+
+                    // Keywords for Ordinary Shares
+                    const isOrdinary = text.includes('ordinary') || text.includes('equity') || text.includes('public issue');
+                    
+                    // Keywords to exclude
+                    const isExclude = text.includes('debenture') || 
+                                      text.includes('bond') || 
+                                      text.includes('mutual fund') || 
+                                      text.includes('preference') ||
+                                      text.includes('right') ||
+                                      text.includes('promoter');
+                    
+                    if (isOrdinary && !isExclude) {
+                        // Extract company name (first line or before the first dash)
+                        const rawName = row.innerText.split(/[\\n-]/)[0].trim();
+                        // Clean up if it grabbed headers
+                        if (rawName.toLowerCase().includes('company') || rawName.length < 3) continue;
+                        
+                        clickable.click();
+                        return rawName;
+                    }
                 }
+                return null;
             }
-            return null;
-        }
-    """)
+        """)
+
+        if clicked_ipo:
+            break
+        
+        if attempt == 0:
+            print(f"[{username}] No 'Ordinary Shares' found on first pass. Refreshing list...")
+            page.reload(wait_until='networkidle')
+            page.wait_for_timeout(4000)
 
     if clicked_ipo:
         print(f"[{username}] Targeted IPO: {clicked_ipo}")
