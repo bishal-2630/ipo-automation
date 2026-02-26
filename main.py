@@ -800,6 +800,7 @@ def run_automation():
                 page.goto(os.getenv("MEROSHARE_URL", "https://meroshare.cdsc.com.np"), timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
+                reset_done = False
                 for attempt in range(1, MAX_RETRIES + 1):
                     login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
                     if login_result is True:
@@ -808,11 +809,11 @@ def run_automation():
                         break
                     elif login_result == "EXPIRED":
                         if handle_password_reset(page, account):
-                            print(f"[{username}] Password successfully reset and logged in.")
-                            logged_in = True
+                            print(f"[{username}] Password successfully reset. Please re-run the script to apply for IPO.")
+                            reset_done = True
                         else:
                             print(f"[{username}] Password reset failed.")
-                        break # Don't retry login if expired/reset attempted
+                        break # Exit login loop
                     else:
                         print(f"Error: [{username}] Login failed (Attempt {attempt}). Retrying...")
                         page.reload()
@@ -821,6 +822,9 @@ def run_automation():
 
                 if logged_in:
                     apply_ipo(page, account)
+                elif reset_done:
+                    # Silent exit for this account as instructions were already printed
+                    pass
                 else:
                     print(f"Error: [{username}] Failed to login after {MAX_RETRIES} attempts.")
 
@@ -862,6 +866,7 @@ def run_status_check():
                 page.goto(os.getenv("MEROSHARE_URL", "https://meroshare.cdsc.com.np"), timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
+                reset_done = False
                 for attempt in range(1, MAX_RETRIES + 1):
                     login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
                     if login_result is True:
@@ -869,7 +874,8 @@ def run_status_check():
                         break
                     elif login_result == "EXPIRED":
                         if handle_password_reset(page, account):
-                            logged_in = True
+                            print(f"[{username}] Password successfully reset. Please re-run the script to check status.")
+                            reset_done = True
                         break
                     else:
                         page.reload()
@@ -878,6 +884,8 @@ def run_status_check():
 
                 if logged_in:
                     check_status(page, account)
+                elif reset_done:
+                    pass
                 else:
                     print(f"Error: [{username}] Could not log in for status check.")
 
