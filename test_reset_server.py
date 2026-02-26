@@ -69,6 +69,11 @@ if __name__ == "__main__":
             else:
                 print("❌ FAILURE: Password was NOT updated.")
 
+        print("\n--- ACTION REQUIRED ---")
+        print("I have paused the script before cleanup.")
+        print("Open 'accounts.json' right now to see the updated 'nhBXy3#bhA$U' password!")
+        input("\nPress Enter when you are done viewing to restore your original file...")
+
         # Cleanup
         if os.path.exists("accounts.json.bak"):
             if os.path.exists("accounts.json"):
