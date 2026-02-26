@@ -672,7 +672,7 @@ def check_status(page, account):
                 if clicked_info.get('mode', '').lower() == 'edit':
                     print(f"[{username}] 'Edit' mode detected from list view. Filling form...")
                     fill_and_submit_form(page, account, company_name=target_ipo)
-                    page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                    page.goto(f"{os.getenv('MEROSHARE_URL', 'https://meroshare.cdsc.com.np')}/#/asba/report", wait_until='networkidle')
                     continue
 
                 page.wait_for_load_state('networkidle')
@@ -750,7 +750,7 @@ def check_status(page, account):
                             page.wait_for_load_state('networkidle')
                             # fill_and_submit_form handles its own success/failure notifications
                             fill_and_submit_form(page, account, company_name=target_ipo)
-                            page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                            page.goto(f"{os.getenv('MEROSHARE_URL', 'https://meroshare.cdsc.com.np')}/#/asba/report", wait_until='networkidle')
                             continue
                         else:
                             print(f"[{username}] No reapply button found for rejected IPO. Ending silently.")
@@ -768,7 +768,7 @@ def check_status(page, account):
 
             except Exception as e:
                 print(f"[{username}] Error checking {target_ipo}: {e}")
-                page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                page.goto(f"{os.getenv('MEROSHARE_URL', 'https://meroshare.cdsc.com.np')}/#/asba/report", wait_until='networkidle')
 
     except Exception as e:
         print(f"[{username}] Fatal error in check_status: {e}")
@@ -795,7 +795,7 @@ def run_automation():
 
             page = browser.new_page()
             try:
-                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
+                page.goto(os.getenv("MEROSHARE_URL", "https://meroshare.cdsc.com.np"), timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
@@ -857,7 +857,7 @@ def run_status_check():
 
             page = browser.new_page()
             try:
-                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
+                page.goto(os.getenv("MEROSHARE_URL", "https://meroshare.cdsc.com.np"), timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
                 for attempt in range(1, MAX_RETRIES + 1):
