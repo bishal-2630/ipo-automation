@@ -19,7 +19,7 @@ MOCK_ACCOUNT = {
     "TPIN": "1234",
     "BANK_NAME": "TEST BANK",
     "KITTA": "10",
-    "EMAIL": "kbishal177@gmail.com"
+    "EMAIL": "rogerhere30@gmail.com"
 }
 
 class Handler(http.server.SimpleHTTPRequestHandler):
