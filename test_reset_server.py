@@ -10,7 +10,7 @@ from main import run_automation
 # Configuration for test
 PORT = 8080
 DIRECTORY = "test_env"
-TEST_ACCOUNTS_FILE = "test_accounts.json"
+TEST_ACCOUNTS_FILE = "test_accounts_result.json"  # Persistent test file
 MOCK_ACCOUNT = {
     "MEROSHARE_USER": "TEST_USER_123",
     "MEROSHARE_PASS": "OldPass123!",
@@ -27,14 +27,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
 def start_server():
+    # Use a direct way to stop the server if needed, or just let it exit with the thread
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         print(f"Serving at port {PORT}")
         httpd.serve_forever()
 
 if __name__ == "__main__":
-    # 1. Create test accounts file
+    # 1. Create persistent test accounts file
+    print(f"Creating/Resetting {TEST_ACCOUNTS_FILE}...")
     with open(TEST_ACCOUNTS_FILE, "w") as f:
-        json.dump([MOCK_ACCOUNT], f)
+        json.dump([MOCK_ACCOUNT], f, indent=4)
 
     # 2. Start mock server in background
     server_thread = threading.Thread(target=start_server, daemon=True)
@@ -44,13 +46,12 @@ if __name__ == "__main__":
     # 3. Setup environment variables for test
     os.environ["MEROSHARE_URL"] = f"http://localhost:{PORT}/login.html"
     os.environ["HEADLESS"] = "true"  # Set to true for background execution
-    
-    # We need to tell get_accounts to use our test file
-    if os.path.exists("accounts.json"):
-        shutil.move("accounts.json", "accounts.json.bak")
-    shutil.copy(TEST_ACCOUNTS_FILE, "accounts.json")
+    os.environ["ACCOUNTS_FILE"] = TEST_ACCOUNTS_FILE # POINT TO OUR TEST FILE
 
     print("\n--- STARTING AUTOMATION TEST ---")
+    print(f"Test will operate on: {TEST_ACCOUNTS_FILE}")
+    print(f"Your real 'accounts.json' will NOT be touched.\n")
+    
     try:
         run_automation()
     except Exception as e:
@@ -59,27 +60,22 @@ if __name__ == "__main__":
         print("\n--- TEST FINISHED ---")
         
         # Check if password was updated
-        with open("accounts.json", "r") as f:
+        with open(TEST_ACCOUNTS_FILE, "r") as f:
             updated_accounts = json.load(f)
             new_pass = updated_accounts[0]["MEROSHARE_PASS"]
-            print(f"Final Password in accounts.json: {new_pass}")
+            print(f"Final Password in {TEST_ACCOUNTS_FILE}: {new_pass}")
             
             if new_pass != MOCK_ACCOUNT["MEROSHARE_PASS"]:
-                print("✅ SUCCESS: Password was updated in accounts.json!")
+                print(f"✅ SUCCESS: Password was updated in {TEST_ACCOUNTS_FILE}!")
             else:
                 print("❌ FAILURE: Password was NOT updated.")
 
-        print("\n--- ACTION REQUIRED ---")
-        print("I have paused the script before cleanup.")
-        print("Open 'accounts.json' right now to see the updated 'nhBXy3#bhA$U' password!")
-        input("\nPress Enter when you are done viewing to restore your original file...")
-
-        # Cleanup
-        if os.path.exists("accounts.json.bak"):
-            if os.path.exists("accounts.json"):
-                os.remove("accounts.json")
-            shutil.move("accounts.json.bak", "accounts.json")
-        if os.path.exists(TEST_ACCOUNTS_FILE):
-             os.remove(TEST_ACCOUNTS_FILE)
+        print("\n--- VERIFICATION ---")
+        print(f"You can now open '{TEST_ACCOUNTS_FILE}' to see the results.")
+        print("This file will remain here even after the script exits.")
         
-        print("Cleanup complete. Mock server will stop when script exits.")
+        # Optional cleanup of technical temp files (but keep the result file)
+        if os.path.exists("test_accounts.json"):
+             os.remove("test_accounts.json")
+        
+        print("\nMock server will stop when script exits.")

@@ -62,11 +62,12 @@ def update_local_account_password(username, new_password):
     """
     Updates the password for a specific user in the local accounts.json file.
     """
-    if not os.path.exists("accounts.json"):
+    accounts_file = os.getenv("ACCOUNTS_FILE", "accounts.json")
+    if not os.path.exists(accounts_file):
         return False
 
     try:
-        with open("accounts.json", "r") as f:
+        with open(accounts_file, "r") as f:
             accounts = json.load(f)
         
         updated = False
@@ -76,9 +77,9 @@ def update_local_account_password(username, new_password):
                 updated = True
         
         if updated:
-            with open("accounts.json", "w") as f:
+            with open(accounts_file, "w") as f:
                 json.dump(accounts, f, indent=4)
-            print(f"Successfully updated local accounts.json for {username}")
+            print(f"Successfully updated local {accounts_file} for {username}")
             return True
     except Exception as e:
         print(f"Warning: Failed to update local accounts.json: {e}")
@@ -543,12 +544,13 @@ def get_accounts():
         except json.JSONDecodeError:
             print("Error: Error decoding ACCOUNTS_JSON environment variable.")
 
-    if not accounts and os.path.exists("accounts.json"):
+    accounts_file = os.getenv("ACCOUNTS_FILE", "accounts.json")
+    if not accounts and os.path.exists(accounts_file):
         try:
-            with open("accounts.json", "r") as f:
+            with open(accounts_file, "r") as f:
                 accounts = json.load(f)
         except json.JSONDecodeError:
-            print("Error: Error decoding local accounts.json file.")
+            print(f"Error: Error decoding local {accounts_file} file.")
 
     if not accounts and os.getenv("MEROSHARE_USER"):
         accounts = [{
