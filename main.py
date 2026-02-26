@@ -3,46 +3,20 @@ from dotenv import load_dotenv
 import os
 import time
 import json
-import smtplib
 import random
 import string
 import secrets
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
+from notifications import send_email_notification
+from expiry_handler import (
+    detect_account_expiry,
+    check_account_expiry_warning,
+    handle_expired_account,
+)
 
 # Load environment variables
 load_dotenv()
 
-def send_email_notification(to_email, subject, message):
-    """
-    Sends an email notification via Gmail SMTP.
-    """
-    if not to_email:
-        return
-
-    sender_email = os.getenv("SENDER_EMAIL")
-    sender_password = os.getenv("SENDER_PASSWORD")
-    smtp_server = os.getenv("SMTP_SERVER") or "smtp.gmail.com"
-    smtp_port = int(os.getenv("SMTP_PORT") or 587)
-
-    if not (sender_email and sender_password):
-        print("Warning: Skipping email notification (Sender credentials missing in .env)")
-        return
-
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = f"IPO Automation <{sender_email}>"
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(message, 'plain'))
-
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.send_message(msg)
-        print(f"Email Notification Sent to {to_email}")
-    except Exception as e:
-        print(f"Warning: Failed to send email notification to {to_email}: {e}")
 
 def generate_new_password(length=12):
     """
@@ -358,6 +332,7 @@ def fill_and_submit_form(page, account, company_name=None):
     else:
         print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
 
+
 def login(page, username, password, dp_name):
     """
     Attempts to login a specific user.
@@ -442,6 +417,11 @@ def login(page, username, password, dp_name):
         if "change-password" in page.url or "changepassword" in page.url or page.locator("text=Change Password").is_visible():
             print(f"[{username}] ⚠️ Password Expired / Change required detected.")
             return "EXPIRED"
+
+        # Check for DEMAT or MeroShare account expiry
+        expiry_result = detect_account_expiry(page, username)
+        if expiry_result:
+            return expiry_result
 
         if page.locator("text=My ASBA").is_visible():
             return True
@@ -786,6 +766,9 @@ def run_automation():
                         else:
                             print(f"[{username}] Password reset failed.")
                         break # Don't retry login if expired/reset attempted
+                    elif login_result in ("DEMAT_EXPIRED", "MEROSHARE_EXPIRED"):
+                        handle_expired_account(account, login_result)
+                        break
                     else:
                         print(f"Error: [{username}] Login failed (Attempt {attempt}). Retrying...")
                         page.reload()
@@ -793,6 +776,7 @@ def run_automation():
                         time.sleep(2)
 
                 if logged_in:
+                    check_account_expiry_warning(page, account)
                     apply_ipo(page, account)
                 else:
                     print(f"Error: [{username}] Failed to login after {MAX_RETRIES} attempts.")
@@ -840,9 +824,8 @@ def run_status_check():
                     if login_result is True:
                         logged_in = True
                         break
-                    elif login_result == "EXPIRED":
-                        if handle_password_reset(page, account):
-                            logged_in = True
+                    elif login_result in ("EXPIRED", "DEMAT_EXPIRED", "MEROSHARE_EXPIRED"):
+                        print(f"[{username}] Login blocked ({login_result}). Skipping check in status mode.")
                         break
                     else:
                         page.reload()
@@ -852,7 +835,7 @@ def run_status_check():
                 if logged_in:
                     check_status(page, account)
                 else:
-                    print(f"Error: [{username}] Could not log in for status check.")
+                    print(f"Error: [{username}] Could not log in for status check (or checks restricted to apply mode).")
 
             except Exception as e:
                 print(f"Error: [{username}] {e}")
