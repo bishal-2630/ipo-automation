@@ -113,7 +113,7 @@ def handle_password_reset(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User
-                msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
+                msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update in GitHub secrets."
                 send_email_notification(account.get('EMAIL'), f"[MeroShare] Password Reset Successful", msg)
                 
                 # Update local file
