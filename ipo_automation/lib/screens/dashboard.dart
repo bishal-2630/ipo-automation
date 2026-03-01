@@ -31,7 +31,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: ListTile(
                     leading: Icon(Icons.account_circle, color: Colors.blue),
                     title: Text(acc.user, style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("${acc.bank}\nLast Run: ${acc.lastApplied}"),
+                    subtitle: Text(
+                      "${acc.bank}\nLast Run: ${acc.lastApplied}",
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
                     trailing: Icon(acc.isActive ? Icons.check_circle : Icons.pause_circle, 
                                    color: acc.isActive ? Colors.green : Colors.grey),
                   ),

@@ -10,6 +10,7 @@ class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = '__all__'
+        read_only_fields = ['owner']
 
 class ApplicationLogSerializer(serializers.ModelSerializer):
     account_user = serializers.CharField(source='account.meroshare_user', read_only=True)

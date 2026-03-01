@@ -159,7 +159,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(Icons.account_balance, size: 14, color: Colors.grey),
                   SizedBox(width: 4),
-                  Text(acc.bank, style: TextStyle(color: Colors.grey[400])),
+                  Expanded(
+                    child: Text(
+                      acc.bank, 
+                      style: TextStyle(color: Colors.grey[400]),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
               SizedBox(height: 4),
@@ -167,7 +173,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(Icons.history, size: 14, color: Colors.grey),
                   SizedBox(width: 4),
-                  Text("Last run: ${acc.lastApplied}", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                  Expanded(
+                    child: Text(
+                      "Last run: ${acc.lastApplied}", 
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ],
