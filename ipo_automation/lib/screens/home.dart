@@ -41,13 +41,41 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.deepPurple,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () async {
-              await api.logout();
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginScreen()));
+          PopupMenuButton<String>(
+            icon: Icon(Icons.account_circle, size: 30),
+            tooltip: 'User Profile',
+            onSelected: (value) async {
+              if (value == 'logout') {
+                await api.logout();
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => LoginScreen()),
+                );
+              }
             },
-          )
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_outline, size: 20, color: Colors.grey),
+                    SizedBox(width: 10),
+                    Text("My Profile"),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 20, color: Colors.redAccent),
+                    SizedBox(width: 10),
+                    Text("Logout", style: TextStyle(color: Colors.redAccent)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: FutureBuilder<List<Account>>(

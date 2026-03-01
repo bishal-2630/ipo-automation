@@ -18,6 +18,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _crnController = TextEditingController();
   final _pinController = TextEditingController();
   final _bankController = TextEditingController();
+  final _emailController = TextEditingController();
 
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
@@ -25,12 +26,13 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       try {
         final accountData = {
           'meroshare_user': _userController.text,
-          'meroshare_password': _passwordController.text, // Warning: plaintext for now
+          'meroshare_pass': _passwordController.text, // Match Django field name
           'dp_name': _dpController.text,
           'crn': _crnController.text,
-          'pin': _pinController.text,
+          'tpin': _pinController.text, // Match Django field name
           'bank_name': _bankController.text,
-          'kitta': 10, // Default to 10 kitta
+          'email': _emailController.text,
+          'kitta': 10,
         };
 
         await api.addAccount(accountData);
@@ -64,6 +66,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               _buildTextField(_crnController, "CRN Number"),
               _buildTextField(_pinController, "4-Digit PIN", keyboardType: TextInputType.number),
               _buildTextField(_bankController, "Bank Name"),
+              _buildTextField(_emailController, "Email Address", keyboardType: TextInputType.emailAddress, required: false),
               SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -82,7 +85,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, {bool obscureText = false, TextInputType? keyboardType}) {
+  Widget _buildTextField(TextEditingController controller, String label, {bool obscureText = false, TextInputType? keyboardType, bool required = true}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: TextFormField(
@@ -94,7 +97,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           border: OutlineInputBorder(),
           filled: true,
         ),
-        validator: (value) => value!.isEmpty ? 'This field is required' : null,
+        validator: (value) {
+          if (required && (value == null || value.isEmpty)) {
+            return 'This field is required';
+          }
+          return null;
+        },
       ),
     );
   }
@@ -107,6 +115,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _crnController.dispose();
     _pinController.dispose();
     _bankController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 }
