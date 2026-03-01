@@ -18,7 +18,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _crnController = TextEditingController();
   final _pinController = TextEditingController();
   final _bankController = TextEditingController();
-  final _emailController = TextEditingController();
+  final _bankController = TextEditingController();
 
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
@@ -31,7 +31,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           'crn': _crnController.text,
           'tpin': _pinController.text, // Match Django field name
           'bank_name': _bankController.text,
-          'email': _emailController.text,
           'kitta': 10,
         };
 
@@ -66,7 +65,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               _buildTextField(_crnController, "CRN Number"),
               _buildTextField(_pinController, "4-Digit PIN", keyboardType: TextInputType.number),
               _buildTextField(_bankController, "Bank Name"),
-              _buildTextField(_emailController, "Email Address", keyboardType: TextInputType.emailAddress, required: false),
               SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -115,7 +113,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _crnController.dispose();
     _pinController.dispose();
     _bankController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 }
