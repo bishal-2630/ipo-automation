@@ -23,7 +23,6 @@ captcha.png
 db.sqlite3
 
 # Mobile App (Front-end code should not be in backend repo)
-ipo_automation/
 node_modules/
 dist/
 build/
