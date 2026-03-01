@@ -8,3 +8,5 @@ redis
 django-environ
 django-celery-beat
 firebase-admin
+dj-database-url
+psycopg2-binary
