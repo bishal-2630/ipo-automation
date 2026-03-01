@@ -18,7 +18,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _crnController = TextEditingController();
   final _pinController = TextEditingController();
   final _bankController = TextEditingController();
-  final _bankController = TextEditingController();
 
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
