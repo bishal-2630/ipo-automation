@@ -1,7 +1,10 @@
 from django.db import models
+from django.contrib.auth.models import User
+
 import os
 
 class Account(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='meroshare_accounts')
     meroshare_user = models.CharField(max_length=100, unique=True)
     meroshare_pass = models.CharField(max_length=255)  # Should be encrypted in production
     dp_name = models.CharField(max_length=255)
