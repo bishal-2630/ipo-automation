@@ -12,7 +12,6 @@ class Account(models.Model):
     tpin = models.CharField(max_length=10)
     bank_name = models.CharField(max_length=255)
     kitta = models.IntegerField(default=10)
-    email = models.EmailField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     last_applied = models.DateTimeField(auto_now=True)
 

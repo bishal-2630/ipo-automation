@@ -22,7 +22,6 @@ def apply_ipo_task(account_id):
             'TPIN': account_obj.tpin,
             'BANK_NAME': account_obj.bank_name,
             'KITTA': str(account_obj.kitta),
-            'EMAIL': account_obj.email
         }
         
         # We'll need to import the functions from main.py or move them here
