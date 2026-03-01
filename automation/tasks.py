@@ -3,6 +3,7 @@ from playwright.sync_api import sync_playwright
 import os
 import json
 from .models import Account, ApplicationLog
+from .utils import send_fcm_notification
 from django.utils import timezone
 
 # Import existing functions (we'll need to adapt them slightly to use DB instead of JSON)
@@ -51,6 +52,11 @@ def apply_ipo_task(account_id):
                          status="Triggered",
                          remark="Automation task started successfully"
                      )
+                     send_fcm_notification(
+                         account_obj.owner,
+                         "IPO Applied Successfully!",
+                         f"The IPO application for {account_obj.meroshare_user} has been triggered."
+                     )
                 else:
                      ApplicationLog.objects.create(
                          account=account_obj,
@@ -58,12 +64,22 @@ def apply_ipo_task(account_id):
                          status="Failed",
                          remark=f"Login failed: {login_result}"
                      )
+                     send_fcm_notification(
+                         account_obj.owner,
+                         "IPO Application Failed",
+                         f"Login failed for {account_obj.meroshare_user}. Please check your credentials."
+                     )
             except Exception as e:
                 ApplicationLog.objects.create(
                     account=account_obj,
                     company_name="N/A",
                     status="Error",
                     remark=str(e)
+                )
+                send_fcm_notification(
+                    account_obj.owner,
+                    "IPO Task Error",
+                    f"An error occurred while processing {account_obj.meroshare_user}: {str(e)}"
                 )
             finally:
                 browser.close()

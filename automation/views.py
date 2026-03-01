@@ -1,14 +1,31 @@
-from rest_framework import viewsets
-from .models import Account, ApplicationLog
-from .serializers import AccountSerializer, ApplicationLogSerializer
+from .models import Account, ApplicationLog, FCMToken
+from .serializers import AccountSerializer, ApplicationLogSerializer, FCMTokenSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, viewsets
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
+
+class FCMTokenViewSet(viewsets.ModelViewSet):
+    serializer_class = FCMTokenSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    queryset = FCMToken.objects.all()
+
+    def perform_create(self, serializer):
+        token = self.request.data.get('token')
+        # If this exact token already exists, just update its user/device_id
+        # Else create a new one. Update instead of crash on unique=True.
+        FCMToken.objects.update_or_create(
+            token=token,
+            defaults={
+                'user': self.request.user,
+                'device_id': self.request.data.get('device_id')
+            }
+        )
 
 
 class AccountViewSet(viewsets.ModelViewSet):
