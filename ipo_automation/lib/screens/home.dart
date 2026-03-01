@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/account.dart';
 import 'add_account.dart';
-import 'auth_screen.dart';
-
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -41,6 +40,15 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text("IPO Automation", style: TextStyle(fontWeight: FontWeight.bold)), 
         backgroundColor: Colors.deepPurple,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () async {
+              await api.logout();
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginScreen()));
+            },
+          )
+        ],
       ),
       body: FutureBuilder<List<Account>>(
         future: api.getAccounts(),
