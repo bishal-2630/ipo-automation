@@ -41,8 +41,13 @@ class AccountViewSet(viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
 class ApplicationLogViewSet(viewsets.ModelViewSet):
-    queryset = ApplicationLog.objects.all().order_by('-timestamp')
     serializer_class = ApplicationLogSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only return logs for accounts owned by the logged-in user
+        return ApplicationLog.objects.filter(account__owner=self.request.user).order_by('-timestamp')
 
 class RegisterView(APIView):
     def post(self, request):
