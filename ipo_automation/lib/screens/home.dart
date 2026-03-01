@@ -3,6 +3,7 @@ import '../services/api_service.dart';
 import '../models/account.dart';
 import 'add_account.dart';
 import 'login_screen.dart';
+import 'dashboard.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -109,13 +110,19 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() {});
               await _fetchLatestLog();
             },
-            child: ListView.builder(
-              padding: EdgeInsets.only(bottom: 80), // Space for bottom bar
-              itemCount: accounts.length,
-              itemBuilder: (context, index) {
-                final acc = accounts[index];
-                return _buildAccountCard(acc);
-              },
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: [
+                ListView.builder(
+                  padding: EdgeInsets.only(bottom: 80),
+                  itemCount: accounts.length,
+                  itemBuilder: (context, index) {
+                    final acc = accounts[index];
+                    return _buildAccountCard(acc);
+                  },
+                ),
+                DashboardScreen(),
+              ],
             ),
           );
         },

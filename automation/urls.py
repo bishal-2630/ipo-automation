@@ -4,7 +4,7 @@ from .views import AccountViewSet, ApplicationLogViewSet, RegisterView, LoginVie
 
 router = DefaultRouter()
 router.register(r'accounts', AccountViewSet, basename='account')
-router.register(r'logs', ApplicationLogViewSet)
+router.register(r'logs', ApplicationLogViewSet, basename='applicationlog')
 router.register(r'fcm-tokens', FCMTokenViewSet, basename='fcm-token')
 
 urlpatterns = [
