@@ -1,11 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AccountViewSet, ApplicationLogViewSet, RegisterView, LoginView
-
+from .views import AccountViewSet, ApplicationLogViewSet, RegisterView, LoginView, FCMTokenViewSet
 
 router = DefaultRouter()
 router.register(r'accounts', AccountViewSet, basename='account')
 router.register(r'logs', ApplicationLogViewSet)
+router.register(r'fcm-tokens', FCMTokenViewSet, basename='fcm-token')
 
 urlpatterns = [
     path('', include(router.urls)),

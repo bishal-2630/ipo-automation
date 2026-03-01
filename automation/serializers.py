@@ -1,5 +1,10 @@
 from rest_framework import serializers
-from .models import Account, ApplicationLog
+from .models import Account, ApplicationLog, FCMToken
+
+class FCMTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FCMToken
+        fields = ['token', 'device_id']
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:

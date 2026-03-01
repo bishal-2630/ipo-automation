@@ -84,12 +84,29 @@ class ApiService {
       Uri.parse('$baseUrl/accounts/'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Token $token' // Attach token here
+        'Authorization': 'Token $token'
       },
       body: json.encode(accountData),
     );
     if (response.statusCode != 201) {
       throw Exception('Failed to add account: ${response.body}');
     }
+  }
+
+  Future<void> saveFcmToken(String fcmToken, String deviceId) async {
+    final token = await getToken();
+    if (token == null) return;
+
+    await http.post(
+      Uri.parse('$baseUrl/fcm-tokens/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Token $token'
+      },
+      body: json.encode({
+        'token': fcmToken,
+        'device_id': deviceId,
+      }),
+    );
   }
 }

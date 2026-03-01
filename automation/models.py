@@ -19,6 +19,15 @@ class Account(models.Model):
     def __str__(self):
         return self.meroshare_user
 
+class FCMToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fcm_tokens')
+    token = models.TextField(unique=True)
+    device_id = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_id or 'Unknown Device'}"
+
 class ApplicationLog(models.Model):
     account = models.ForeignKey(Account, on_delete=models.CASCADE)
     company_name = models.CharField(max_length=255)
