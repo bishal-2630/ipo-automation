@@ -21,11 +21,17 @@ class ApiService {
     await prefs.remove('token');
   }
 
-  Future<bool> register(String username, String password) async {
+  Future<bool> register(String username, String password, String email, String firstName, String lastName) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/register/'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'username': username, 'password': password}),
+      body: json.encode({
+        'username': username, 
+        'password': password,
+        'email': email,
+        'first_name': firstName,
+        'last_name': lastName,
+      }),
     );
     if (response.statusCode == 201) {
       final data = json.decode(response.body);

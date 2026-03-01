@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home.dart';
-import 'screens/auth_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,8 +22,9 @@ class IPOApp extends StatelessWidget {
       title: 'IPO Automation',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.deepPurple, brightness: Brightness.dark),
-      // If logged in, go to Home; else go to AuthScreen
-      home: isLoggedIn ? HomeScreen() : AuthScreen(),
+      // If logged in, go to Home; else go to LoginScreen
+      home: isLoggedIn ? HomeScreen() : LoginScreen(),
     );
   }
 }
+
