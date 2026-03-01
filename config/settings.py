@@ -25,7 +25,13 @@ SECRET_KEY = 'django-insecure-azjx#96-4kp94gos^&#)n=1*p*u6lkqwgkaqt+c@7hy*$tszlg
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'bishal26-ipo-automation.hf.space', 
+    '.hf.space', 
+    'localhost', 
+    '127.0.0.1', 
+    'proxy.spaces.internal.huggingface.tech'
+]
 
 
 # Application definition
