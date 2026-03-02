@@ -1,5 +1,5 @@
 # Vercel WSGI Handler for IPO Automation
-# Force trigger: de4ba9e
+# Force trigger: v3.11-sync-check
 import os
 from django.core.wsgi import get_wsgi_application
 
