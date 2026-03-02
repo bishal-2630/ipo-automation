@@ -12,7 +12,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 
 def _get_cipher() -> Fernet:
-    key = os.environ.get("ENCRYPTION_KEY", "")
+    key = os.environ.get("ENCRYPTION_KEY", "").strip()
     if not key:
         raise RuntimeError(
             "ENCRYPTION_KEY environment variable is missing in Vercel. "
