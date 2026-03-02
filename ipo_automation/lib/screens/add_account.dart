@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
 class AddAccountScreen extends StatefulWidget {
+  final Account? account;
+
+  AddAccountScreen({this.account});
+
   @override
   _AddAccountScreenState createState() => _AddAccountScreenState();
 }
@@ -11,6 +15,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final ApiService api = ApiService();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isActive = true;
 
   // Controllers for form fields
   final _userController = TextEditingController();
@@ -20,25 +25,56 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _pinController = TextEditingController();
   final _bankController = TextEditingController();
 
+  bool get isEditMode => widget.account != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (isEditMode) {
+      final acc = widget.account!;
+      _userController.text = acc.user;
+      _dpController.text = acc.bank;
+      _crnController.text = acc.crn;
+      _pinController.text = acc.tPin;
+      _bankController.text = acc.bank; // Note: Check if model.bank is bank_name
+      _isActive = acc.isActive;
+    }
+  }
+
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
         final accountData = {
           'meroshare_user': _userController.text,
-          'meroshare_pass': _passwordController.text, // Match Django field name
           'dp_name': _dpController.text,
           'crn': _crnController.text,
-          'tpin': _pinController.text, // Match Django field name
+          'tpin': _pinController.text,
           'bank_name': _bankController.text,
-          'kitta': 10,
+          'is_active': _isActive,
         };
 
-        await api.addAccount(accountData);
+        // Only include password if it's not empty
+        if (_passwordController.text.isNotEmpty) {
+          accountData['meroshare_pass'] = _passwordController.text;
+        } else if (!isEditMode) {
+          // If not in edit mode, password is required
+          throw Exception("Password is required for new accounts");
+        }
+
+        if (isEditMode) {
+          await api.updateAccount(widget.account!.id, accountData);
+        } else {
+          await api.addAccount(accountData);
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Account Added Successfully!'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(isEditMode ? 'Account Updated Successfully!' : 'Account Added Successfully!'), 
+            backgroundColor: Colors.green
+          ),
         );
-        Navigator.pop(context, true); // Return true to signal refresh needed
+        Navigator.pop(context, true);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -52,7 +88,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Add New Account")),
+      appBar: AppBar(
+        title: Text(isEditMode ? "Edit Account" : "Add New Account"),
+        backgroundColor: Colors.deepPurple,
+      ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16.0),
         child: Form(
@@ -66,7 +105,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
-                    labelText: "MeroShare Password",
+                    labelText: isEditMode ? "New Password (Optional)" : "MeroShare Password",
                     border: OutlineInputBorder(),
                     filled: true,
                     suffixIcon: IconButton(
@@ -74,22 +113,35 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
-                  validator: (v) => v!.isEmpty ? "This field is required" : null,
+                  validator: (v) {
+                    if (!isEditMode && (v == null || v.isEmpty)) {
+                      return "This field is required";
+                    }
+                    return null;
+                  },
                 ),
               ),
               _buildTextField(_dpController, "DP Name (e.g., GLOBAL IME BANK)"),
               _buildTextField(_crnController, "CRN Number"),
               _buildTextField(_pinController, "4-Digit PIN", keyboardType: TextInputType.number),
               _buildTextField(_bankController, "Bank Name"),
+              SwitchListTile(
+                title: Text("Active Account"),
+                subtitle: Text("IPOs will only be applied for active accounts"),
+                value: _isActive,
+                onChanged: (val) => setState(() => _isActive = val),
+              ),
               SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _submitForm,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
                   child: _isLoading 
                       ? CircularProgressIndicator(color: Colors.white)
-                      : Text("Save Account", style: TextStyle(fontSize: 18)),
+                      : Text(isEditMode ? "Update Account" : "Save Account", 
+                             style: TextStyle(fontSize: 18, color: Colors.white)),
                 ),
               ),
             ],

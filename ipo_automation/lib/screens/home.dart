@@ -205,20 +205,15 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        trailing: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: acc.isActive ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            acc.isActive ? "ACTIVE" : "PAUSED",
-            style: TextStyle(
-              color: acc.isActive ? Colors.green : Colors.grey,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
+        trailing: IconButton(
+          icon: Icon(Icons.edit, color: Colors.deepPurple),
+          onPressed: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => AddAccountScreen(account: acc)),
+            );
+            if (result == true) setState(() {});
+          },
         ),
       ),
     );
