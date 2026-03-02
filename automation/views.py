@@ -1,5 +1,5 @@
-from .models import Account, ApplicationLog, FCMToken
-from .serializers import AccountSerializer, ApplicationLogSerializer, FCMTokenSerializer
+from .models import Account, ApplicationLog, FCMToken, BankAccount
+from .serializers import AccountSerializer, ApplicationLogSerializer, FCMTokenSerializer, BankAccountSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 from .tasks import run_all_accounts_task
 
+
 class FCMTokenViewSet(viewsets.ModelViewSet):
     serializer_class = FCMTokenSerializer
     authentication_classes = [TokenAuthentication]
@@ -18,8 +19,6 @@ class FCMTokenViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         token = self.request.data.get('token')
-        # If this exact token already exists, just update its user/device_id
-        # Else create a new one. Update instead of crash on unique=True.
         FCMToken.objects.update_or_create(
             token=token,
             defaults={
@@ -33,13 +32,25 @@ class AccountViewSet(viewsets.ModelViewSet):
     serializer_class = AccountSerializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
-        # Only return accounts owned by the logged-in user
         return Account.objects.filter(owner=self.request.user)
+
     def perform_create(self, serializer):
-        # Automatically set the owner to the logged-in user when saving
         serializer.save(owner=self.request.user)
+
+
+class BankAccountViewSet(viewsets.ModelViewSet):
+    serializer_class = BankAccountSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return BankAccount.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
 
 class ApplicationLogViewSet(viewsets.ModelViewSet):
     serializer_class = ApplicationLogSerializer
@@ -47,8 +58,8 @@ class ApplicationLogViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Only return logs for accounts owned by the logged-in user
         return ApplicationLog.objects.filter(account__owner=self.request.user).order_by('-timestamp')
+
 
 class RegisterView(APIView):
     def post(self, request):
@@ -59,13 +70,12 @@ class RegisterView(APIView):
         last_name = request.data.get('last_name', '')
         if not username or not password:
             return Response({'error': 'Please provide username and password'}, status=status.HTTP_400_BAD_REQUEST)
-        
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
-            
         user = User.objects.create_user(username=username, password=password, email=email, first_name=first_name, last_name=last_name)
         token, created = Token.objects.get_or_create(user=user)
         return Response({'token': token.key}, status=status.HTTP_201_CREATED)
+
 
 class LoginView(APIView):
     def post(self, request):
@@ -76,6 +86,7 @@ class LoginView(APIView):
             token, created = Token.objects.get_or_create(user=user)
             return Response({'token': token.key}, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
 
 class ManualTriggerView(APIView):
     authentication_classes = [TokenAuthentication]

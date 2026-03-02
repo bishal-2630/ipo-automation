@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/account.dart';
 import 'add_account.dart';
+import 'add_bank_screen.dart';
+import 'bank_list_screen.dart';
 import 'login_screen.dart';
 import 'dashboard.dart';
+import '../models/bank_account.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -105,43 +108,57 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-              await _fetchLatestLog();
-            },
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: [
-                ListView.builder(
-                  padding: EdgeInsets.only(bottom: 80),
-                  itemCount: accounts.length,
-                  itemBuilder: (context, index) {
-                    final acc = accounts[index];
-                    return _buildAccountCard(acc);
-                  },
-                ),
-                DashboardScreen(),
-              ],
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {});
+          await _fetchLatestLog();
+        },
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            FutureBuilder<List<Account>>(
+              future: api.getAccounts(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
+                final accounts = snapshot.data ?? [];
+                if (accounts.isEmpty) return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
+                return Scaffold(
+                  body: ListView.builder(
+                    padding: EdgeInsets.only(bottom: 80),
+                    itemCount: accounts.length,
+                    itemBuilder: (context, index) => _buildAccountCard(accounts[index]),
+                  ),
+                  floatingActionButton: FloatingActionButton(
+                    heroTag: 'add_account',
+                    onPressed: () async {
+                      if (await Navigator.push(context, MaterialPageRoute(builder: (context) => AddAccountScreen())) == true) setState(() {});
+                    },
+                    child: Icon(Icons.add),
+                    backgroundColor: Colors.deepPurple,
+                  ),
+                );
+              },
             ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => AddAccountScreen()),
-          );
-          if (result == true) {
-            setState(() {}); // Refresh list if account was added
-          }
-        },
-        icon: Icon(Icons.add),
-        label: Text("Add Account"),
-        backgroundColor: Colors.deepPurpleAccent,
+            BankListScreen(),
+            DashboardScreen(),
+          ],
+        ),
       ),
       bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildEmptyState(String title, String sub) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inbox, size: 80, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(title, style: TextStyle(fontSize: 18, color: Colors.grey)),
+          Text(sub, style: TextStyle(color: Colors.grey)),
+        ],
+      ),
     );
   }
 
@@ -219,44 +236,16 @@ class _HomeScreenState extends State<HomeScreen> {
       selectedItemColor: Colors.amber,
       unselectedItemColor: Colors.grey,
       currentIndex: _selectedIndex,
+      type: BottomNavigationBarType.fixed,
       onTap: (index) {
         setState(() {
           _selectedIndex = index;
         });
-        if (index == 1 && _latestNotification != null) {
-          // If they click notifications, show the latest log in a snackbar or dialog
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(_latestNotification!),
-              backgroundColor: Colors.deepPurple,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
       },
       items: [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.account_balance_wallet),
-          label: 'Accounts',
-        ),
-        BottomNavigationBarItem(
-          icon: Stack(
-            children: [
-              Icon(Icons.notifications),
-              if (_latestNotification != null)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: EdgeInsets.all(2),
-                    decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                    constraints: BoxConstraints(minWidth: 8, minHeight: 8),
-                  ),
-                ),
-            ],
-          ),
-          label: 'Status',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.wallet), label: 'Accounts'),
+        BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Banks'),
+        BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Status'),
       ],
     );
   }

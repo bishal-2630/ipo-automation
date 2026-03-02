@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/account.dart';
+import '../models/bank_account.dart';
 
 class ApiService {
   static const String baseUrl = 'https://bishal26-ipo-automation.hf.space/api';
@@ -108,5 +109,47 @@ class ApiService {
         'device_id': deviceId,
       }),
     );
+  }
+
+  // --- Bank Operations ---
+
+  Future<List<BankAccount>> getBankAccounts() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/bank-accounts/'),
+      headers: {'Authorization': 'Token $token'},
+    );
+    if (response.statusCode == 200) {
+      List jsonResponse = json.decode(response.body);
+      return jsonResponse.map((data) => BankAccount.fromJson(data)).toList();
+    } else {
+      throw Exception('Failed to load bank accounts');
+    }
+  }
+
+  Future<void> addBankAccount(Map<String, dynamic> bankData) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/bank-accounts/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Token $token'
+      },
+      body: json.encode(bankData),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to add bank account: ${response.body}');
+    }
+  }
+
+  Future<void> deleteBankAccount(int id) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/bank-accounts/$id/'),
+      headers: {'Authorization': 'Token $token'},
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete bank account');
+    }
   }
 }
