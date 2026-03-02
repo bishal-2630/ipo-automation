@@ -21,7 +21,34 @@ class _BankListScreenState extends State<BankListScreen> {
             return Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text("Error loading banks: ${snapshot.error}"));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red, size: 60),
+                    SizedBox(height: 16),
+                    Text(
+                      "Failed to load bank accounts",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "This might be due to a connection issue or the server being updated. You can still add new credentials below.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => setState(() {}),
+                      icon: Icon(Icons.refresh),
+                      label: Text("Retry Connection"),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           final banks = snapshot.data ?? [];

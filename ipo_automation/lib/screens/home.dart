@@ -37,6 +37,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  int _selectedIndex = 0;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,32 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<Account>>(
-        future: api.getAccounts(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red)));
-          }
-
-          final accounts = snapshot.data ?? [];
-
-          if (accounts.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                   Icon(Icons.inbox, size: 80, color: Colors.grey),
-                   SizedBox(height: 16),
-                   Text("No accounts added yet.", style: TextStyle(fontSize: 18, color: Colors.grey)),
-                   Text("Tap + to add an account.", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            );
-          }
-
       body: RefreshIndicator(
         onRefresh: () async {
           setState(() {});
@@ -116,35 +92,53 @@ class _HomeScreenState extends State<HomeScreen> {
         child: IndexedStack(
           index: _selectedIndex,
           children: [
-            FutureBuilder<List<Account>>(
-              future: api.getAccounts(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
-                final accounts = snapshot.data ?? [];
-                if (accounts.isEmpty) return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
-                return Scaffold(
-                  body: ListView.builder(
-                    padding: EdgeInsets.only(bottom: 80),
-                    itemCount: accounts.length,
-                    itemBuilder: (context, index) => _buildAccountCard(accounts[index]),
-                  ),
-                  floatingActionButton: FloatingActionButton(
-                    heroTag: 'add_account',
-                    onPressed: () async {
-                      if (await Navigator.push(context, MaterialPageRoute(builder: (context) => AddAccountScreen())) == true) setState(() {});
-                    },
-                    child: Icon(Icons.add),
-                    backgroundColor: Colors.deepPurple,
-                  ),
-                );
-              },
-            ),
+            _buildAccountsTab(),
             BankListScreen(),
             DashboardScreen(),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildAccountsTab() {
+    return FutureBuilder<List<Account>>(
+      future: api.getAccounts(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red)));
+        }
+
+        final accounts = snapshot.data ?? [];
+
+        if (accounts.isEmpty) {
+          return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
+        }
+
+        return Scaffold(
+          body: ListView.builder(
+            padding: EdgeInsets.only(bottom: 80),
+            itemCount: accounts.length,
+            itemBuilder: (context, index) => _buildAccountCard(accounts[index]),
+          ),
+          floatingActionButton: FloatingActionButton(
+            heroTag: 'add_account',
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AddAccountScreen()),
+              );
+              if (result == true) setState(() {});
+            },
+            child: Icon(Icons.add),
+            backgroundColor: Colors.deepPurple,
+          ),
+        );
+      },
     );
   }
 
@@ -227,8 +221,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  int _selectedIndex = 0;
 
   Widget _buildBottomNav() {
     return BottomNavigationBar(
