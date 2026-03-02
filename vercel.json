@@ -1,5 +1,8 @@
 {
     "version": 2,
+    "env": {
+        "VERCEL_FORCE_PROD_SYNC": "v3.16-final"
+    },
     "builds": [
         {
             "src": "vercel_wsgi.py",
@@ -7,9 +10,6 @@
             "config": {
                 "maxLambdaSize": "15mb",
                 "runtime": "python3.12"
-            },
-            "env": {
-                "VERCEL_FORCE_PROD_SYNC": "v3.15-final"
             }
         }
     ],
