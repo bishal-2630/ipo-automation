@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AccountViewSet, ApplicationLogViewSet, RegisterView, LoginView, FCMTokenViewSet
+from .views import AccountViewSet, ApplicationLogViewSet, RegisterView, LoginView, FCMTokenViewSet, ManualTriggerView
 
 router = DefaultRouter()
 router.register(r'accounts', AccountViewSet, basename='account')
@@ -11,4 +11,5 @@ urlpatterns = [
     path('', include(router.urls)),
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/login/', LoginView.as_view(), name='login'),
+    path('run-all/', ManualTriggerView.as_view(), name='run-all'),
 ]

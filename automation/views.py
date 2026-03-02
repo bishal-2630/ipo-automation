@@ -8,6 +8,7 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
+from .tasks import run_all_accounts_task
 
 class FCMTokenViewSet(viewsets.ModelViewSet):
     serializer_class = FCMTokenSerializer
@@ -75,3 +76,11 @@ class LoginView(APIView):
             token, created = Token.objects.get_or_create(user=user)
             return Response({'token': token.key}, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+class ManualTriggerView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        run_all_accounts_task.delay()
+        return Response({"status": "Automation triggered for all active accounts"}, status=status.HTTP_200_OK)

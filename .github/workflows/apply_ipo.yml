@@ -1,42 +1,30 @@
-name: IPO Automation Daily
+name: Daily IPO Application Check
 
 on:
   schedule:
-    # Apply: Runs at 11:30 AM Nepal Time (UTC+5:45) = 05:45 UTC every day
-    - cron: "45 5 * * *"
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+    - cron: '30 10 * * *'  # 4:15 PM NPT (10:30 UTC)
+  workflow_dispatch:      # Allow manual triggering
 
 jobs:
-  apply-ipo:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/set-up-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.11'
 
-      - name: Install Python Dependencies
+      - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          pip install playwright python-dotenv psycopg2-binary firebase-admin
           playwright install chromium
 
       - name: Run IPO Automation Script
         env:
-          ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          RUN_MODE: "apply"
-        run: python main.py
-
-      - name: Upload Debug Artifacts (Screenshots)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-artifacts
-          path: "*.png"
-          retention-days: 3
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Pass other needed secrets if any
+        run: python run_github_automation.py
