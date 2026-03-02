@@ -32,9 +32,14 @@ def apply_ipo_task(account_id):
             print(error_msg)
             ApplicationLog.objects.create(
                 account=account_obj,
+                company_name="IPO Automation",
                 status="Error",
-                remark=error_msg,
-                timestamp=timezone.now()
+                remark=error_msg
+            )
+            send_fcm_notification(
+                account_obj.owner,
+                "Automation Error",
+                f"Dependencies missing for {account_obj.meroshare_user}. Please check server logs."
             )
             return
 
@@ -62,9 +67,14 @@ def apply_ipo_task(account_id):
                     apply_ipo(page, account_data)
                     ApplicationLog.objects.create(
                         account=account_obj,
+                        company_name="IPO Automation",
                         status="Success",
-                        remark="IPO applied successfully via automation task",
-                        timestamp=timezone.now()
+                        remark="IPO applied successfully via automation task"
+                    )
+                    send_fcm_notification(
+                        account_obj.owner,
+                        "🚀 IPO Applied!",
+                        f"IPO application for {account_obj.meroshare_user} was successful."
                     )
                     send_fcm_notification(
                         account_obj.owner,
@@ -74,16 +84,26 @@ def apply_ipo_task(account_id):
                 else:
                     ApplicationLog.objects.create(
                         account=account_obj,
+                        company_name="IPO Automation",
                         status="Failed",
-                        remark=f"Login failed: {login_result}",
-                        timestamp=timezone.now()
+                        remark=f"Login failed: {login_result}"
+                    )
+                    send_fcm_notification(
+                        account_obj.owner,
+                        "⚠️ Application Failed",
+                        f"Login failed for {account_obj.meroshare_user}. Please check your credentials."
                     )
             except Exception as e:
                 ApplicationLog.objects.create(
                     account=account_obj,
+                    company_name="IPO Automation",
                     status="Error",
-                    remark=f"Exception during application: {str(e)}",
-                    timestamp=timezone.now()
+                    remark=f"Exception during application: {str(e)}"
+                )
+                send_fcm_notification(
+                    account_obj.owner,
+                    "❌ Automation Crash",
+                    f"An error occurred while applying for {account_obj.meroshare_user}."
                 )
             finally:
                 browser.close()
@@ -93,9 +113,14 @@ def apply_ipo_task(account_id):
         if account_obj:
             ApplicationLog.objects.create(
                 account=account_obj,
+                company_name="System",
                 status="Critical Error",
-                remark=f"Critical exception: {str(e)}",
-                timestamp=timezone.now()
+                remark=f"Critical exception: {str(e)}"
+            )
+            send_fcm_notification(
+                account_obj.owner,
+                "🚨 Critical System Error",
+                "A critical error occurred in the IPO automation system."
             )
 
 @shared_task
