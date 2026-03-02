@@ -152,4 +152,15 @@ class ApiService {
       throw Exception('Failed to delete bank account');
     }
   }
+
+  Future<void> deleteLog(int id) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/logs/$id/'),
+      headers: {'Authorization': 'Token $token'},
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete log');
+    }
+  }
 }

@@ -10,6 +10,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _formKey = GlobalKey<FormState>();
   final ApiService api = ApiService();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   // Controllers for form fields
   final _userController = TextEditingController();
@@ -59,7 +60,23 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           child: Column(
             children: [
               _buildTextField(_userController, "MeroShare Username"),
-              _buildTextField(_passwordController, "Password", obscureText: true),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: "MeroShare Password",
+                    border: OutlineInputBorder(),
+                    filled: true,
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
+                  validator: (v) => v!.isEmpty ? "This field is required" : null,
+                ),
+              ),
               _buildTextField(_dpController, "DP Name (e.g., GLOBAL IME BANK)"),
               _buildTextField(_crnController, "CRN Number"),
               _buildTextField(_pinController, "4-Digit PIN", keyboardType: TextInputType.number),

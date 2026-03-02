@@ -15,6 +15,7 @@ class _AddBankScreenState extends State<AddBankScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   int? _selectedAccountId;
+  bool _obscurePassword = true;
 
   List<Account> _accounts = [];
   bool _isLoading = false;
@@ -142,11 +143,15 @@ class _AddBankScreenState extends State<AddBankScreen> {
               SizedBox(height: 20),
               TextFormField(
                 controller: _passwordController,
-                obscureText: true,
+                obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   labelText: "E-Banking Password",
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
                 ),
                 validator: (v) => v!.isEmpty ? "Required" : null,
               ),
