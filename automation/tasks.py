@@ -5,14 +5,55 @@ import json
 from .models import Account, ApplicationLog
 from .utils import send_fcm_notification
 from django.utils import timezone
+import sys
 
-# Import existing functions (we'll need to adapt them slightly to use DB instead of JSON)
-# For now, let's create a task that runs the automation for a specific account
+# Add the project root to sys.path to allow importing main.py
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
 
 @shared_task
 def apply_ipo_task(account_id):
+    account_obj = None
     try:
         account_obj = Account.objects.get(id=account_id)
+        
+        # Debugging environment
+        import os
+        import sys
+        cwd = os.getcwd()
+        path = sys.path
+        
+        try:
+            from main import login, apply_ipo
+        except ImportError as e:
+            # Try to add /app explicitly if not there
+            if '/app' not in sys.path:
+                sys.path.append('/app')
+            
+            # Check if main.py exists in common locations
+            paths_to_check = ['/app/main.py', './main.py', os.path.join(cwd, 'main.py')]
+            exists_info = {p: os.path.exists(p) for p in paths_to_check}
+            
+            # Log the error and environment info
+            error_msg = f"ImportError: {str(e)}\nCWD: {cwd}\nPath: {path}\nExists: {exists_info}"
+            print(error_msg)
+            
+            # Last ditch effort: load from source
+            import importlib.util
+            spec = None
+            for p in paths_to_check:
+                if os.path.exists(p):
+                    spec = importlib.util.spec_from_file_location("main", p)
+                    break
+            
+            if spec:
+                main_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(main_module)
+                login = main_module.login
+                apply_ipo = main_module.apply_ipo
+            else:
+                raise ImportError(f"Could not find main.py in {paths_to_check}. {error_msg}")
         # Adapt account_obj to the dictionary format expected by main.py functions
         account = {
             'MEROSHARE_USER': account_obj.meroshare_user,
@@ -24,13 +65,7 @@ def apply_ipo_task(account_id):
             'KITTA': str(account_obj.kitta),
         }
         
-        # We'll need to import the functions from main.py or move them here
-        # For simplicity in this demo, let's assume we've refactored them into a module 'automation_logic'
-        # But since main.py is in the root, we can try to import from it if we add root to path
-        
-        import sys
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from main import login, apply_ipo
+        # Import is handled above inside the try block
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -86,7 +121,14 @@ def apply_ipo_task(account_id):
     except Account.DoesNotExist:
         pass
     except Exception as e:
-        print(f"Error in apply_ipo_task: {e}")
+        print(f"Critical error in apply_ipo_task: {e}")
+        if account_obj:
+            ApplicationLog.objects.create(
+                account=account_obj,
+                company_name="System",
+                status="Critical Error",
+                remark=f"Critical exception: {str(e)}"
+            )
 
 @shared_task
 def run_all_accounts_task():
