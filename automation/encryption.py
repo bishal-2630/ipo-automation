@@ -21,7 +21,10 @@ def _get_cipher() -> Fernet:
     try:
         return Fernet(key.encode())
     except Exception as e:
-        raise RuntimeError(f"Invalid ENCRYPTION_KEY format: {str(e)}. Please ensure you generated the key correctly.")
+        raise RuntimeError(
+            f"Invalid ENCRYPTION_KEY format (Length: {len(key)}). "
+            f"Error: {str(e)}. Please ensure you pasted the exact 44-character key into Vercel settings."
+        )
 
 
 def encrypt_password(plain: str) -> str:
