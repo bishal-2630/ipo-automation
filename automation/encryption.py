@@ -10,16 +10,18 @@ Add the output as ENCRYPTION_KEY to your .env and Hugging Face secrets.
 import os
 from cryptography.fernet import Fernet, InvalidToken
 
-_KEY = os.environ.get("ENCRYPTION_KEY", "").encode()
-
 
 def _get_cipher() -> Fernet:
-    if not _KEY:
+    key = os.environ.get("ENCRYPTION_KEY", "")
+    if not key:
         raise RuntimeError(
-            "ENCRYPTION_KEY environment variable is not set. "
-            "Please add it to your environment variables or Hugging Face secrets."
+            "ENCRYPTION_KEY environment variable is missing in Vercel. "
+            "Go to Settings -> Environment Variables and ensure it is added to 'All Environments'."
         )
-    return Fernet(_KEY)
+    try:
+        return Fernet(key.encode())
+    except Exception as e:
+        raise RuntimeError(f"Invalid ENCRYPTION_KEY format: {str(e)}. Please ensure you generated the key correctly.")
 
 
 def encrypt_password(plain: str) -> str:
