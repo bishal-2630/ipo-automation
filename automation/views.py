@@ -111,4 +111,4 @@ class ManualTriggerView(APIView):
         return Response({"status": "Automation triggered for all active accounts"}, status=status.HTTP_200_OK)
 def home_view(request):
     from django.http import HttpResponse
-    return HttpResponse("<h1>IPO Automation API</h1><p>The backend service is running successfully. Access the API at <a href='/api/'>/api/</a>.</p>")
+    return HttpResponse("<h1>IPO Automation API</h1><p>The backend service is running successfully. (Version: Mar 03 - 03:05)</p><p>Access the API at <a href='/api/'>/api/</a>.</p>")
