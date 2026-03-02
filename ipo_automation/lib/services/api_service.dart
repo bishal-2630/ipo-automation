@@ -93,6 +93,21 @@ class ApiService {
       throw Exception('Failed to add account: ${response.body}');
     }
   }
+  
+  Future<void> updateAccount(int id, Map<String, dynamic> data) async {
+    final token = await getToken();
+    final response = await http.patch(
+      Uri.parse('$baseUrl/accounts/$id/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Token $token'
+      },
+      body: json.encode(data),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update account: ${response.body}');
+    }
+  }
 
   Future<void> saveFcmToken(String fcmToken, String deviceId) async {
     final token = await getToken();
