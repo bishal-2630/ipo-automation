@@ -110,6 +110,7 @@ class ApplicationLog(models.Model):
     company_name = models.CharField(max_length=255)
     status = models.CharField(max_length=100)
     remark = models.TextField(blank=True, null=True)
+    is_read = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
