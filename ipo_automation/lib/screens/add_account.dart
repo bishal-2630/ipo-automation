@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import 'package:ipo_automation/services/api_service.dart';
+import 'package:ipo_automation/models/account.dart';
 
 class AddAccountScreen extends StatefulWidget {
   final Account? account;
