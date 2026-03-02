@@ -86,7 +86,7 @@ class _BankListScreenState extends State<BankListScreen> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("User: ${bank.bankUsername}"),
+                        Text("Phone: ${bank.phoneNumber}"),
                         if (bank.linkedAccountId != null)
                           Text("Linked to Account ID: ${bank.linkedAccountId}", style: TextStyle(color: Colors.blue, fontSize: 12)),
                       ],

@@ -20,18 +20,20 @@ class AccountSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         plain = validated_data.pop('meroshare_pass', None)
-        instance = super().create(validated_data)
+        instance = Account(**validated_data)
         if plain:
             instance.set_meroshare_pass(plain)
-            instance.save()
+        # Owner is usually set in perform_create, but we handle it here if passed
+        instance.save()
         return instance
 
     def update(self, instance, validated_data):
         plain = validated_data.pop('meroshare_pass', None)
-        instance = super().update(instance, validated_data)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         if plain:
             instance.set_meroshare_pass(plain)
-            instance.save()
+        instance.save()
         return instance
 
 
@@ -44,24 +46,25 @@ class BankAccountSerializer(serializers.ModelSerializer):
         model = BankAccount
         fields = [
             'id', 'bank', 'bank_display',
-            'bank_username', 'bank_password',
+            'phone_number', 'bank_password',
             'linked_account', 'created_at',
         ]
         read_only_fields = ['owner', 'created_at']
 
     def create(self, validated_data):
         plain = validated_data.pop('bank_password')
-        instance = super().create(validated_data)
+        instance = BankAccount(**validated_data)
         instance.set_bank_password(plain)
         instance.save()
         return instance
 
     def update(self, instance, validated_data):
         plain = validated_data.pop('bank_password', None)
-        instance = super().update(instance, validated_data)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         if plain:
             instance.set_bank_password(plain)
-            instance.save()
+        instance.save()
         return instance
 
 
