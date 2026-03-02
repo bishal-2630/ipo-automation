@@ -5,7 +5,8 @@ if "%COMMIT_MSG%"=="" set COMMIT_MSG=Update backend
 echo [1/4] Copying files to d:\hf_deploy...
 xcopy "d:\ipoautomation\config" "d:\hf_deploy\config" /Y /E /I
 xcopy "d:\ipoautomation\automation" "d:\hf_deploy\automation" /Y /E /I
-copy "d:\ipoautomation\requirements_api.txt" "d:\hf_deploy\requirements.txt" /Y
+copy "d:\ipoautomation\requirements.txt" "d:\hf_deploy\requirements.txt" /Y
+xcopy "d:\ipoautomation\bank_checkers" "d:\hf_deploy\bank_checkers" /Y /E /I
 copy "d:\ipoautomation\manage.py" "d:\hf_deploy\manage.py" /Y
 copy "d:\ipoautomation\main.py" "d:\hf_deploy\main.py" /Y
 copy "d:\ipoautomation\notifications.py" "d:\hf_deploy\notifications.py" /Y
