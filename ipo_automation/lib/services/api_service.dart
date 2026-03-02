@@ -177,6 +177,8 @@ class ApiService {
     if (response.statusCode != 204) {
       throw Exception('Failed to delete log');
     }
+  }
+
   Future<void> markLogsAsRead() async {
     final token = await getToken();
     await http.post(

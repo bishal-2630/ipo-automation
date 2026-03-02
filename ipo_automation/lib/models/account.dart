@@ -4,6 +4,8 @@ class Account {
   final String bank;
   final String lastApplied;
   final bool isActive;
+  final String crn;
+  final String tPin;
 
   Account({
     required this.id,
@@ -11,6 +13,8 @@ class Account {
     required this.bank,
     required this.lastApplied,
     required this.isActive,
+    required this.crn,
+    required this.tPin,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
@@ -20,6 +24,8 @@ class Account {
       bank: json['bank_name'],
       lastApplied: json['last_applied'] ?? 'Never',
       isActive: json['is_active'],
+      crn: json['crn'] ?? '',
+      tPin: json['tpin'] ?? '',
     );
   }
 }

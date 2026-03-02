@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
-import '../models/account.dart';
+import 'package:ipo_automation/services/api_service.dart';
+import 'package:ipo_automation/models/account.dart';
 import 'add_account.dart';
 import 'add_bank_screen.dart';
 import 'bank_list_screen.dart';
 import 'login_screen.dart';
 import 'dashboard.dart';
-import '../models/bank_account.dart';
+import 'package:ipo_automation/models/bank_account.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
