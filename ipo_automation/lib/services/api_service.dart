@@ -144,6 +144,27 @@ class ApiService {
     }
   }
 
+  Future<void> getHealthDiagnostics() async {
+    try {
+      final healthUrl = baseUrl.replaceAll('/api', '') + '/health/';
+      print('DEBUG: Fetching Diagnostics from $healthUrl');
+      final response = await http.get(Uri.parse(healthUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('-----------------------------------------');
+        print('🔧 BACKEND DIAGNOSTICS:');
+        print('VERSION: ${data['version']}');
+        print('ENCRYPTION_KEY_LENGTH: ${data['encryption_key_length']}');
+        print('BRANCH: ${data['branch']}');
+        print('-----------------------------------------');
+      } else {
+        print('DEBUG: Diagnostics check failed with status ${response.statusCode}');
+      }
+    } catch (e) {
+      print('DEBUG: Error fetching diagnostics: $e');
+    }
+  }
+
   Future<void> addBankAccount(Map<String, dynamic> bankData) async {
     final token = await getToken();
     print('DEBUG: Adding bank account to $baseUrl/bank-accounts/');
@@ -156,8 +177,10 @@ class ApiService {
       body: json.encode(bankData),
     );
     print('DEBUG: Response Status: ${response.statusCode}');
-    print('DEBUG: Response Body: ${response.body}');
+    
     if (response.statusCode != 201) {
+      print('DEBUG: Error detected. Fetching terminal diagnostics...');
+      await getHealthDiagnostics();
       throw Exception('Failed to add bank account: ${response.body}');
     }
   }
