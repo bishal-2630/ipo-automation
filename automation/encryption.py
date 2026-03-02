@@ -15,7 +15,10 @@ _KEY = os.environ.get("ENCRYPTION_KEY", "").encode()
 
 def _get_cipher() -> Fernet:
     if not _KEY:
-        raise RuntimeError("ENCRYPTION_KEY environment variable is not set.")
+        raise RuntimeError(
+            "ENCRYPTION_KEY environment variable is not set. "
+            "Please add it to your environment variables or Hugging Face secrets."
+        )
     return Fernet(_KEY)
 
 
