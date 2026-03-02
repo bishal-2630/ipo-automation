@@ -26,12 +26,10 @@ SECRET_KEY = 'django-insecure-azjx#96-4kp94gos^&#)n=1*p*u6lkqwgkaqt+c@7hy*$tszlg
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'bishal26-ipo-automation.hf.space', 
-    '.hf.space', 
+    'ipoautomation.vercel.app',
     '.vercel.app',
-    'localhost', 
-    '127.0.0.1', 
-    'proxy.spaces.internal.huggingface.tech'
+    'localhost',
+    '127.0.0.1',
 ]
 
 

@@ -5,7 +5,7 @@ import '../models/account.dart';
 import '../models/bank_account.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://bishal26-ipo-automation.hf.space/api';
+  static const String baseUrl = 'https://ipoautomation.vercel.app/api';
 
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
