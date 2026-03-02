@@ -111,11 +111,13 @@ class ManualTriggerView(APIView):
         return Response({"status": "Automation triggered for all active accounts"}, status=status.HTTP_200_OK)
 class HealthView(APIView):
     def get(self, request):
+        import os
+        key = os.environ.get("ENCRYPTION_KEY", "").strip()
         return Response({
             "status": "online",
-            "version": "v3.10",
-            "branch": "user-part-1",
-            "commit": "090cbfb+"
+            "version": "v3.15",
+            "encryption_key_length": len(key),
+            "branch": "user-part-1"
         })
 
 def home_view(request):
