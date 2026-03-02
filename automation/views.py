@@ -18,15 +18,21 @@ class FCMTokenViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = FCMToken.objects.all()
 
-    def perform_create(self, serializer):
-        token = self.request.data.get('token')
-        FCMToken.objects.update_or_create(
+    def create(self, request, *args, **kwargs):
+        token = request.data.get('token')
+        device_id = request.data.get('device_id')
+        if not token:
+            return Response({'error': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        fcm_token_obj, created = FCMToken.objects.update_or_create(
             token=token,
             defaults={
-                'user': self.request.user,
-                'device_id': self.request.data.get('device_id')
+                'user': request.user,
+                'device_id': device_id
             }
         )
+        serializer = self.get_serializer(fcm_token_obj)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
 class AccountViewSet(viewsets.ModelViewSet):
