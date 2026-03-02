@@ -155,6 +155,10 @@ class ApiService {
         print('🔧 BACKEND DIAGNOSTICS:');
         print('VERSION: ${data['version']}');
         print('ENCRYPTION_KEY_LENGTH: ${data['encryption_key_length']}');
+        print('ENCRYPTION_KEY_VALID: ${data['encryption_key_valid']}');
+        if (data['encryption_error'] != null) {
+          print('ENCRYPTION_ERROR: ${data['encryption_error']}');
+        }
         print('BRANCH: ${data['branch']}');
         print('-----------------------------------------');
       } else {

@@ -112,11 +112,23 @@ class ManualTriggerView(APIView):
 class HealthView(APIView):
     def get(self, request):
         import os
+        from cryptography.fernet import Fernet
         key = os.environ.get("ENCRYPTION_KEY", "").strip()
+        key_valid = False
+        error_msg = None
+        try:
+            if key:
+                Fernet(key.encode())
+                key_valid = True
+        except Exception as e:
+            error_msg = str(e)
+            
         return Response({
             "status": "online",
-            "version": "v3.15",
+            "version": "v3.17-final",
             "encryption_key_length": len(key),
+            "encryption_key_valid": key_valid,
+            "encryption_error": error_msg,
             "branch": "user-part-1"
         })
 
