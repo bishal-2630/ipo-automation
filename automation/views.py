@@ -109,6 +109,15 @@ class ManualTriggerView(APIView):
     def post(self, request):
         run_all_accounts_task.delay()
         return Response({"status": "Automation triggered for all active accounts"}, status=status.HTTP_200_OK)
+class HealthView(APIView):
+    def get(self, request):
+        return Response({
+            "status": "online",
+            "version": "v3.10",
+            "branch": "user-part-1",
+            "commit": "090cbfb+"
+        })
+
 def home_view(request):
     from django.http import HttpResponse
-    return HttpResponse("<h1>IPO Automation API</h1><p>The backend service is running successfully. (Version: Mar 03 - 03:05)</p><p>Access the API at <a href='/api/'>/api/</a>.</p>")
+    return HttpResponse("<h1>IPO Automation API</h1><p>The backend service is running successfully. Access the API at <a href='/api/'>/api/</a>.</p>")
