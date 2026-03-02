@@ -12,6 +12,10 @@ class Migration(migrations.Migration):
         ('automation', '0003_remove_account_email'),
     ]
 
+    replaces = [
+        ('automation', '0004_alter_account_meroshare_pass_bankaccount'),
+    ]
+
     operations = [
         migrations.AlterField(
             model_name='account',
