@@ -12,7 +12,7 @@ class _AddBankScreenState extends State<AddBankScreen> {
   final ApiService api = ApiService();
 
   String _selectedBank = 'nic_asia';
-  final _usernameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   int? _selectedAccountId;
 
@@ -75,7 +75,7 @@ class _AddBankScreenState extends State<AddBankScreen> {
       try {
         await api.addBankAccount({
           'bank': _selectedBank,
-          'bank_username': _usernameController.text,
+          'phone_number': _phoneController.text,
           'bank_password': _passwordController.text,
           'linked_account': _selectedAccountId,
         });
@@ -117,17 +117,25 @@ class _AddBankScreenState extends State<AddBankScreen> {
                   prefixIcon: Icon(Icons.account_balance),
                 ),
                 items: _bankList.entries.map((e) {
-                  return DropdownMenuItem(value: e.key, child: Text(e.value));
+                  return DropdownMenuItem(
+                    value: e.key, 
+                    child: Text(
+                      e.value,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
                 }).toList(),
                 onChanged: (val) => setState(() => _selectedBank = val!),
+                isExpanded: true,
               ),
               SizedBox(height: 20),
               TextFormField(
-                controller: _usernameController,
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  labelText: "E-Banking Username",
+                  labelText: "E-Banking Phone Number",
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
+                  prefixIcon: Icon(Icons.phone_android),
                 ),
                 validator: (v) => v!.isEmpty ? "Required" : null,
               ),
@@ -154,10 +162,17 @@ class _AddBankScreenState extends State<AddBankScreen> {
                 items: [
                   DropdownMenuItem(value: null, child: Text("None")),
                   ..._accounts.map((a) {
-                    return DropdownMenuItem(value: a.id, child: Text(a.user));
+                    return DropdownMenuItem(
+                      value: a.id, 
+                      child: Text(
+                        a.user,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
                   }).toList(),
                 ],
                 onChanged: (val) => setState(() => _selectedAccountId = val),
+                isExpanded: true,
               ),
               SizedBox(height: 40),
               ElevatedButton(

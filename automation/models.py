@@ -81,7 +81,7 @@ class BankAccount(models.Model):
         blank=True,
     )
     bank = models.CharField(max_length=50, choices=SUPPORTED_BANKS, default='nic_asia')
-    bank_username = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=20)
     bank_password = models.CharField(max_length=500)  # stored encrypted
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -92,7 +92,7 @@ class BankAccount(models.Model):
         return decrypt_password(self.bank_password)
 
     def __str__(self):
-        return f"{self.get_bank_display()} — {self.bank_username}"
+        return f"{self.get_bank_display()} — {self.phone_number}"
 
 
 class FCMToken(models.Model):

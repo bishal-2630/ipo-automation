@@ -63,7 +63,7 @@ def run_automation():
         cur.execute("""
             SELECT a.id, a.meroshare_user, a.meroshare_pass, a.dp_name,
                    a.crn, a.tpin, a.bank_name, a.kitta, a.owner_id,
-                   b.bank, b.bank_username, b.bank_password
+                   b.bank, b.phone_number, b.bank_password
             FROM automation_account a
             LEFT JOIN automation_bankaccount b ON b.linked_account_id = a.id
             WHERE a.is_active = True;
@@ -89,11 +89,11 @@ def run_automation():
 
                 try:
                     # 2. Bank balance check (if bank credentials are linked)
-                    if acc.get('bank') and acc.get('bank_username') and acc.get('bank_password'):
+                    if acc.get('bank') and acc.get('phone_number') and acc.get('bank_password'):
                         bank_page = browser.new_page()
                         balance = check_balance(
                             bank_code=acc['bank'],
-                            username=acc['bank_username'],
+                            phone_number=acc['phone_number'],
                             password=decrypt(acc['bank_password']),
                             page=bank_page,
                         )

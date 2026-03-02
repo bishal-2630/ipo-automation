@@ -2,7 +2,7 @@ class BankAccount {
   final int id;
   final String bank;
   final String bankDisplay;
-  final String bankUsername;
+  final String phoneNumber;
   final int? linkedAccountId;
   final String createdAt;
 
@@ -10,7 +10,7 @@ class BankAccount {
     required this.id,
     required this.bank,
     required this.bankDisplay,
-    required this.bankUsername,
+    required this.phoneNumber,
     this.linkedAccountId,
     required this.createdAt,
   });
@@ -20,7 +20,7 @@ class BankAccount {
       id: json['id'],
       bank: json['bank'],
       bankDisplay: json['bank_display'],
-      bankUsername: json['bank_username'],
+      phoneNumber: json['phone_number'],
       linkedAccountId: json['linked_account'],
       createdAt: json['created_at'],
     );

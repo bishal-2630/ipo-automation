@@ -249,7 +249,7 @@ def _extract_balance(text: str) -> float | None:
         if val > 0: return val
     return None
 
-def check_balance(bank_code: str, username: str, password: str, page: Page) -> float | None:
+def check_balance(bank_code: str, phone_number: str, password: str, page: Page) -> float | None:
     """
     Generic balance checker.
     Returns the available balance as a float, or None if it cannot be determined.
@@ -266,7 +266,7 @@ def check_balance(bank_code: str, username: str, password: str, page: Page) -> f
         page.wait_for_load_state('networkidle', timeout=30000)
 
         # Basic attempt at login (selectors might need fine-tuning per bank)
-        page.fill(config['user_sel'], username)
+        page.fill(config['user_sel'], phone_number)
         page.fill(config['pass_sel'], password)
         page.click(config['submit_sel'])
         
