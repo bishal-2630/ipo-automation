@@ -76,11 +76,6 @@ def apply_ipo_task(account_id):
                         "🚀 IPO Applied!",
                         f"IPO application for {account_obj.meroshare_user} was successful."
                     )
-                    send_fcm_notification(
-                        account_obj.owner,
-                        "IPO Applied Successfully!",
-                        f"The IPO application for {account_obj.meroshare_user} has been completed."
-                    )
                 else:
                     ApplicationLog.objects.create(
                         account=account_obj,
