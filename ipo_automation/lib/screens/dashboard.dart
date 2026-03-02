@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import '../models/account.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -41,34 +40,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final log = logs[index];
               final isSuccess = log['status'] == 'Triggered' || log['status'] == 'Success';
               
-              return Card(
-                margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isSuccess ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                    child: Icon(
-                      isSuccess ? Icons.check : Icons.error_outline,
-                      color: isSuccess ? Colors.green : Colors.red,
-                    ),
-                  ),
-                  title: Text(
-                    "${log['company_name']}",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Account: ${log['account_user']}"),
-                      Text(
-                        "${log['remark']}",
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              return Dismissible(
+                key: Key(log['id'].toString()),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  color: Colors.redAccent,
+                  child: Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) async {
+                  try {
+                    await api.deleteLog(log['id']);
+                    setState(() {
+                      logs.removeAt(index);
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Notification deleted"), duration: Duration(seconds: 2)),
+                    );
+                  } catch (e) {
+                    setState(() {}); // Refresh to restore item if delete failed
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Delete failed: $e"), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                child: Card(
+                  margin: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isSuccess ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                      child: Icon(
+                        isSuccess ? Icons.check : Icons.error_outline,
+                        color: isSuccess ? Colors.green : Colors.red,
                       ),
-                    ],
-                  ),
-                  trailing: Text(
-                    _formatTime(log['timestamp']),
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    title: Text(
+                      "${log['company_name']}",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Account: ${log['account_user']}"),
+                        Text(
+                          "${log['remark']}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        ),
+                      ],
+                    ),
+                    trailing: Text(
+                      _formatTime(log['timestamp']),
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                   ),
                 ),
               );

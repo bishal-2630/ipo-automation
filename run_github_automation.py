@@ -149,18 +149,26 @@ def run_automation():
 
                     if login_result is True:
                         print(f"  ✅ Login OK. Applying IPO...")
-                        apply_ipo(page, account_data)
-                        status = "Success"
-                        remark = "IPO applied successfully via GitHub Action"
+                        success, result_detail = apply_ipo(page, account_data)
+                        if success:
+                            status = "Success"
+                            ipo_name = result_detail
+                            remark = f"{ipo_name} ipo has been applied successfully."
+                        else:
+                            status = "Failed"
+                            remark = result_detail
+                            ipo_name = "Auto-Check"
                     else:
                         print(f"  ❌ Login failed: {login_result}")
                         status = "Failed"
                         remark = f"Login failed: {login_result}"
+                        ipo_name = "Auto-Check"
 
                 except Exception as e:
                     print(f"  ❌ Exception: {e}")
                     status = "Error"
                     remark = str(e)
+                    ipo_name = "Auto-Check"
 
                 finally:
                     # 4. Write log and send notification
@@ -168,7 +176,7 @@ def run_automation():
                         INSERT INTO automation_applicationlog
                             (account_id, company_name, status, remark, timestamp)
                         VALUES (%s, %s, %s, %s, %s)
-                    """, (acc['id'], "Auto-Check", status, remark,
+                    """, (acc['id'], ipo_name, status, remark,
                           datetime.datetime.now(datetime.timezone.utc)))
                     conn.commit()
 
@@ -178,8 +186,13 @@ def run_automation():
                             (acc['owner_id'],)
                         )
                         tokens = [row[0] for row in cur.fetchall()]
-                        notif_title = "✅ IPO Applied!" if status == "Success" else f"⚠️ IPO {status}"
-                        notif_body = f"{acc['meroshare_user']}: {remark}"
+                        if status == "Success":
+                            notif_title = "✅ IPO Applied!"
+                            notif_body = remark # "[ipo name] ipo has been applied successfully."
+                        else:
+                            notif_title = f"⚠️ IPO {status}"
+                            notif_body = f"{acc['meroshare_user']}: {remark}"
+                        
                         send_push_notification(tokens, notif_title, notif_body)
 
                     page.close()

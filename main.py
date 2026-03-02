@@ -315,6 +315,7 @@ def fill_and_submit_form(page, account, company_name=None):
                 print(f"Application SUCCESS!")
                 msg = f"{company_name} has been applied successfully."
                 send_email_notification(account.get('EMAIL'), f"[MeroShare] Success: {company_name}", f"Hi {username},\n\n{msg}")
+                return True, company_name
             else:
                 error_msg = toast_text
                 if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
@@ -323,13 +324,17 @@ def fill_and_submit_form(page, account, company_name=None):
                 else:
                     msg = f"❌ FAILED: {error_msg} - {username}"
                     send_email_notification(account.get('EMAIL'), f"[MeroShare] Error: Application Failed", f"Hi {username},\n\n{msg}")
+                return False, error_msg
         except:
              if not page.is_visible("#transactionPIN"):
                  print(f"[{username}] Application submitted successfully (modal closed).")
+                 return True, company_name
              else:
                  print(f"Error: [{username}] Application submission failed (modal still open).")
+                 return False, "Application modal still open"
     else:
         print(f"Warning: [{username}] No TPIN provided. Skipping submission.")
+        return False, "No TPIN"
 
 
 def login(page, username, password, dp_name):
@@ -506,10 +511,11 @@ def apply_ipo(page, account):
 
     if clicked_ipo:
         print(f"[{username}] Targeted IPO: {clicked_ipo}")
-        fill_and_submit_form(page, account, company_name=clicked_ipo)
+        return fill_and_submit_form(page, account, company_name=clicked_ipo)
     else:
         print(f"[{username}] No 'Ordinary Shares' found to apply. Skipping silently.")
         page.screenshot(path=f"debug_asba_{username}.png")
+        return False, "No ordinary shares found"
 
 def get_accounts():
     """
