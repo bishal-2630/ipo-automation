@@ -5,7 +5,7 @@ import '../models/account.dart';
 import '../models/bank_account.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://ipoautomation.vercel.app/api';
+  static const String baseUrl = 'https://ipo-automation.vercel.app/api';
 
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -58,10 +58,12 @@ class ApiService {
 
   Future<List<Account>> getAccounts() async {
     final token = await getToken();
+    print('DEBUG: Getting accounts from $baseUrl/accounts/');
     final response = await http.get(
       Uri.parse('$baseUrl/accounts/'),
       headers: {'Authorization': 'Token $token'},
     );
+    print('DEBUG: Response Status: ${response.statusCode}');
     if (response.statusCode == 200) {
       List jsonResponse = json.decode(response.body);
       return jsonResponse.map((data) => Account.fromJson(data)).toList();
@@ -144,6 +146,7 @@ class ApiService {
 
   Future<void> addBankAccount(Map<String, dynamic> bankData) async {
     final token = await getToken();
+    print('DEBUG: Adding bank account to $baseUrl/bank-accounts/');
     final response = await http.post(
       Uri.parse('$baseUrl/bank-accounts/'),
       headers: {
@@ -152,6 +155,8 @@ class ApiService {
       },
       body: json.encode(bankData),
     );
+    print('DEBUG: Response Status: ${response.statusCode}');
+    print('DEBUG: Response Body: ${response.body}');
     if (response.statusCode != 201) {
       throw Exception('Failed to add bank account: ${response.body}');
     }
