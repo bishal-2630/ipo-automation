@@ -83,7 +83,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Account: ${log['account_user']}"),
+                        Row(
+                          children: [
+                            Text("Account: ${log['account_user']}"),
+                            if (log['is_read'] == false) ...[
+                              SizedBox(width: 8),
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                              ),
+                            ],
+                          ],
+                        ),
                         Text(
                           "${log['remark']}",
                           style: TextStyle(fontSize: 12, color: Colors.grey[400]),

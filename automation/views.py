@@ -3,6 +3,7 @@ from .serializers import AccountSerializer, ApplicationLogSerializer, FCMTokenSe
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
@@ -58,7 +59,14 @@ class ApplicationLogViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Only return logs for accounts owned by the logged-in user
         return ApplicationLog.objects.filter(account__owner=self.request.user).order_by('-timestamp')
+
+    @action(detail=False, methods=['post'], url_path='mark-as-read')
+    def mark_as_read(self, request):
+        unreads = self.get_queryset().filter(is_read=False)
+        unreads.update(is_read=True)
+        return Response({'status': 'marked as read'})
 
 
 class RegisterView(APIView):

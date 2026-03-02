@@ -16,6 +16,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService api = ApiService();
   String? _latestNotification;
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -29,7 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (logs.isNotEmpty) {
         final latest = logs.first;
         setState(() {
-          _latestNotification = "📢 ${latest['account_name']}: ${latest['remarks']}";
+          _latestNotification = "📢 ${latest['account_user']}: ${latest['status']}";
+          _unreadCount = logs.where((l) => l['is_read'] == false).length;
         });
       }
     } catch (e) {
@@ -232,12 +234,41 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: (index) {
         setState(() {
           _selectedIndex = index;
+          if (index == 2) {
+            _unreadCount = 0;
+            api.markLogsAsRead();
+          }
         });
       },
       items: [
         BottomNavigationBarItem(icon: Icon(Icons.wallet), label: 'Accounts'),
         BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Banks'),
-        BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Status'),
+        BottomNavigationBarItem(
+          icon: Stack(
+            children: [
+              Icon(Icons.notifications),
+              if (_unreadCount > 0)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '$_unreadCount',
+                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          label: 'Status',
+        ),
       ],
     );
   }

@@ -73,4 +73,4 @@ class ApplicationLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ApplicationLog
-        fields = ['id', 'account', 'account_user', 'company_name', 'status', 'remark', 'timestamp']
+        fields = ['id', 'account', 'account_user', 'company_name', 'status', 'remark', 'is_read', 'timestamp']
