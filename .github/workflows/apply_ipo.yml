@@ -26,5 +26,6 @@ jobs:
       - name: Run IPO Automation Script
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # Pass other needed secrets if any
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          FIREBASE_CREDENTIALS_B64: ${{ secrets.FIREBASE_CREDENTIALS_B64 }}
         run: python run_github_automation.py
