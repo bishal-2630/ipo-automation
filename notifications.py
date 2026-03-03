@@ -64,10 +64,16 @@ def send_push_notification(tokens, title, body):
             cred_path = os.path.join(os.path.dirname(__file__), "config", "firebase_vcc.json")
             if os.path.exists(cred_path):
                 cred = credentials.Certificate(cred_path)
-                firebase_admin.initialize_app(cred)
             else:
-                print(f"Warning: Firebase config not found at {cred_path}. Skipping push notification.")
-                return
+                # Fallback: load from base64-encoded env variable (GitHub Actions)
+                import base64, json
+                b64 = os.environ.get("FIREBASE_CREDENTIALS_B64", "")
+                if not b64:
+                    print(f"Warning: Firebase credentials not found. Set FIREBASE_CREDENTIALS_B64 env var. Skipping push notification.")
+                    return
+                cred_json = json.loads(base64.b64decode(b64).decode())
+                cred = credentials.Certificate(cred_json)
+            firebase_admin.initialize_app(cred)
 
         message = messaging.MulticastMessage(
             notification=messaging.Notification(title=title, body=body),
