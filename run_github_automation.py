@@ -86,18 +86,24 @@ def run_automation():
                 page = browser.new_page()
                 status = "Error"
                 remark = "Unknown error"
+                ipo_name = "Auto-Check"  # Always initialise before try/finally
 
                 try:
                     # 2. Bank balance check (if bank credentials are linked)
                     if acc.get('bank') and acc.get('phone_number') and acc.get('bank_password'):
                         bank_page = browser.new_page()
-                        balance = check_balance(
-                            bank_code=acc['bank'],
-                            phone_number=acc['phone_number'],
-                            password=decrypt(acc['bank_password']),
-                            page=bank_page,
-                        )
-                        bank_page.close()
+                        try:
+                            balance = check_balance(
+                                bank_code=acc['bank'],
+                                phone_number=acc['phone_number'],
+                                password=decrypt(acc['bank_password']),
+                                page=bank_page,
+                            )
+                        except Exception as bank_err:
+                            print(f"  ⚠️  Bank balance check raised exception: {bank_err}. Proceeding with IPO.")
+                            balance = None
+                        finally:
+                            bank_page.close()
 
                         if balance is not None and balance < MIN_BALANCE:
                             print(f"  ⚠️  Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
@@ -120,10 +126,10 @@ def run_automation():
                             # Log and move on to next account
                             cur.execute("""
                                 INSERT INTO automation_applicationlog
-                                    (account_id, company_name, status, remark, timestamp)
-                                VALUES (%s, %s, %s, %s, %s)
+                                    (account_id, company_name, status, remark, timestamp, is_read)
+                                VALUES (%s, %s, %s, %s, %s, %s)
                             """, (acc['id'], "Balance Check", status, remark,
-                                  datetime.datetime.now(datetime.timezone.utc)))
+                                  datetime.datetime.now(datetime.timezone.utc), False))
                             conn.commit()
                             page.close()
                             continue
@@ -157,45 +163,55 @@ def run_automation():
                         else:
                             status = "Failed"
                             remark = result_detail
-                            ipo_name = "Auto-Check"
                     else:
                         print(f"  ❌ Login failed: {login_result}")
                         status = "Failed"
                         remark = f"Login failed: {login_result}"
-                        ipo_name = "Auto-Check"
 
                 except Exception as e:
                     print(f"  ❌ Exception: {e}")
                     status = "Error"
                     remark = str(e)
-                    ipo_name = "Auto-Check"
 
                 finally:
-                    # 4. Write log and send notification
-                    cur.execute("""
-                        INSERT INTO automation_applicationlog
-                            (account_id, company_name, status, remark, timestamp)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (acc['id'], ipo_name, status, remark,
-                          datetime.datetime.now(datetime.timezone.utc)))
-                    conn.commit()
+                    # 4. Write log and send notification — wrapped so a DB error here
+                    #    does NOT prevent the next account from being processed.
+                    try:
+                        cur.execute("""
+                            INSERT INTO automation_applicationlog
+                                (account_id, company_name, status, remark, timestamp, is_read)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (acc['id'], ipo_name, status, remark,
+                              datetime.datetime.now(datetime.timezone.utc), False))
+                        conn.commit()
+                    except Exception as db_err:
+                        print(f"  ⚠️  DB log error for {acc['meroshare_user']}: {db_err}")
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
 
-                    if acc.get('owner_id'):
-                        cur.execute(
-                            "SELECT token FROM automation_fcmtoken WHERE user_id = %s",
-                            (acc['owner_id'],)
-                        )
-                        tokens = [row[0] for row in cur.fetchall()]
-                        if status == "Success":
-                            notif_title = "✅ IPO Applied!"
-                            notif_body = remark # "[ipo name] ipo has been applied successfully."
-                        else:
-                            notif_title = f"⚠️ IPO {status}"
-                            notif_body = f"{acc['meroshare_user']}: {remark}"
-                        
-                        send_push_notification(tokens, notif_title, notif_body)
+                    try:
+                        if acc.get('owner_id'):
+                            cur.execute(
+                                "SELECT token FROM automation_fcmtoken WHERE user_id = %s",
+                                (acc['owner_id'],)
+                            )
+                            tokens = [row[0] for row in cur.fetchall()]
+                            if status == "Success":
+                                notif_title = "✅ IPO Applied!"
+                                notif_body = remark
+                            else:
+                                notif_title = f"⚠️ IPO {status}"
+                                notif_body = f"{acc['meroshare_user']}: {remark}"
+                            send_push_notification(tokens, notif_title, notif_body)
+                    except Exception as notif_err:
+                        print(f"  ⚠️  Notification error for {acc['meroshare_user']}: {notif_err}")
 
-                    page.close()
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
 
             browser.close()
 
