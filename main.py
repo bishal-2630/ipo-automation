@@ -453,7 +453,12 @@ def login(page, username, password, dp_name):
         print(f"[{username}] ⚠️ Login button still disabled after 5s. Forcing it to enable...")
         page.evaluate("""
             () => {
-                const btn = document.querySelector("button[type='submit'], button.sign-in, button:has-text('Login')");
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const btn = buttons.find(b => 
+                    b.type === 'submit' || 
+                    b.classList.contains('sign-in') || 
+                    b.textContent.trim().toLowerCase() === 'login'
+                );
                 if (btn) {
                     btn.disabled = false;
                     btn.removeAttribute('disabled');
