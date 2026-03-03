@@ -22,16 +22,18 @@ def _init_firebase():
             b64 = os.environ.get("FIREBASE_CREDENTIALS_B64", "")
             if not b64:
                 print("  ⚠️  Firebase credentials not found (no file and no FIREBASE_CREDENTIALS_B64 env var). Skipping notifications.")
-                return
+                return False
             cred_json = json.loads(base64.b64decode(b64).decode())
             cred = credentials.Certificate(cred_json)
         firebase_admin.initialize_app(cred)
+    return True
 
 def send_push_notification(fcm_tokens: list, title: str, body: str):
     if not fcm_tokens:
         print("  No FCM tokens – skipping notification.")
         return
-    _init_firebase()
+    if not _init_firebase():
+        return
     message = messaging.MulticastMessage(
         notification=messaging.Notification(title=title, body=body),
         tokens=fcm_tokens,
