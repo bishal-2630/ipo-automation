@@ -7,7 +7,8 @@ import random
 import string
 import secrets
 
-from notifications import send_email_notification
+from notifications import send_email_notification, send_push_notification
+from bank_checkers.bank import check_balance
 from expiry_handler import (
     detect_account_expiry,
     check_account_expiry_warning,
@@ -16,6 +17,8 @@ from expiry_handler import (
 
 # Load environment variables
 load_dotenv()
+
+MIN_BALANCE = 2000.0  # Minimum required balance to apply for IPO (Rs.)
 
 
 def generate_new_password(length=12):
@@ -87,7 +90,9 @@ def handle_password_reset(page, account):
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User
                 msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
-                send_email_notification(account.get('EMAIL'), f"[MeroShare] Password Reset Successful", msg)
+                subj = f"[MeroShare] Password Reset Successful"
+                send_email_notification(account.get('EMAIL'), subj, msg)
+                send_push_notification(account.get('TOKENS'), subj, msg)
                 
                 # Update local file
                 update_local_account_password(username, new_password)
@@ -100,7 +105,9 @@ def handle_password_reset(page, account):
              if "change-password" not in page.url and (page.locator("text=My ASBA").is_visible() or "dashboard" in page.url):
                  print(f"[{username}] Password reset appears successful (redirected).")
                  msg = f"Your MeroShare password for {username} has been automatically reset.\n\nNew Password: {new_password}"
-                 send_email_notification(account.get('EMAIL'), f"[MeroShare] Password Reset Successful", msg)
+                 subj = f"[MeroShare] Password Reset Successful"
+                 send_email_notification(account.get('EMAIL'), subj, msg)
+                 send_push_notification(account.get('TOKENS'), subj, msg)
                  update_local_account_password(username, new_password)
                  return True
                  
@@ -314,16 +321,22 @@ def fill_and_submit_form(page, account, company_name=None):
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
                 msg = f"{company_name} has been applied successfully."
-                send_email_notification(account.get('EMAIL'), f"[MeroShare] Success: {company_name}", f"Hi {username},\n\n{msg}")
+                subj = f"[MeroShare] Success: {company_name}"
+                send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
+                send_push_notification(account.get('TOKENS'), subj, msg)
                 return True, company_name
             else:
                 error_msg = toast_text
                 if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
                     msg = f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
-                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Failed: Insufficient Balance", f"Hi {username},\n\n{msg}")
+                    subj = f"[MeroShare] Failed: Insufficient Balance"
+                    send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
+                    send_push_notification(account.get('TOKENS'), subj, msg)
                 else:
                     msg = f"❌ FAILED: {error_msg} - {username}"
-                    send_email_notification(account.get('EMAIL'), f"[MeroShare] Error: Application Failed", f"Hi {username},\n\n{msg}")
+                    subj = f"[MeroShare] Error: Application Failed"
+                    send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
+                    send_push_notification(account.get('TOKENS'), subj, msg)
                 return False, error_msg
         except:
              if not page.is_visible("#transactionPIN"):
@@ -408,9 +421,20 @@ def login(page, username, password, dp_name):
         page.screenshot(path=f"debug_login_fields_{username}.png")
         return False
 
-    # Capture login button text for debugging and try to click
+    # Wait for Login button to become enabled before clicking
+    # (it stays disabled until DP + credentials are all properly filled)
     print(f"Clicking Login button for {username}...")
-    page.click("button:has-text('Login')")
+    try:
+        page.wait_for_function(
+            "() => { const btn = document.querySelector(\"button[type='submit'], button.sign-in, button:has-text('Login')\"); return btn && !btn.disabled; }",
+            timeout=15000
+        )
+    except Exception:
+        # If still disabled after 15s, take a screenshot and bail gracefully
+        page.screenshot(path=f"debug_login_disabled_{username}.png")
+        print(f"[{username}] ⚠️ Login button still disabled after 15s — check DP selection.")
+        return False
+    page.click("button:has-text('Login'), button[type='submit'].sign-in")
     
     # Wait for navigation/dashboard
     try:
@@ -550,10 +574,13 @@ def get_accounts():
             conn = psycopg2.connect(db_url)
             cur = conn.cursor()
             # Fetch accounts and join with auth_user to get the email
+            # Also join with automation_bankaccount for balance checking
             cur.execute("""
-                SELECT a.meroshare_user, a.meroshare_pass, a.dp_name, a.crn, a.tpin, a.bank_name, a.kitta, u.email
+                SELECT a.id, a.meroshare_user, a.meroshare_pass, a.dp_name, a.crn, a.tpin, a.bank_name, a.kitta, u.email, a.owner_id,
+                       b.bank as bank_code, b.phone_number, b.bank_password
                 FROM automation_account a
                 LEFT JOIN auth_user u ON a.owner_id = u.id
+                LEFT JOIN automation_bankaccount b ON b.linked_account_id = a.id
                 WHERE a.is_active = True;
             """)
             
@@ -561,7 +588,14 @@ def get_accounts():
             db_rows = [dict(zip(columns, row)) for row in cur.fetchall()]
             
             for row in db_rows:
+                # Fetch FCM Tokens for this user
+                tokens = []
+                if row.get('owner_id'):
+                    cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (row['owner_id'],))
+                    tokens = [t[0] for t in cur.fetchall()]
+
                 accounts.append({
+                    "ID": row['id'],
                     "MEROSHARE_USER": row['meroshare_user'],
                     "MEROSHARE_PASS": decrypt_val(row['meroshare_pass']),
                     "DP_NAME": row['dp_name'],
@@ -569,7 +603,11 @@ def get_accounts():
                     "TPIN": row['tpin'],
                     "BANK_NAME": row['bank_name'],
                     "KITTA": str(row['kitta']),
-                    "EMAIL": row.get('email')
+                    "EMAIL": row.get('email'),
+                    "TOKENS": tokens,
+                    "BANK_CODE": row.get('bank_code'),
+                    "BANK_PHONE": row.get('phone_number'),
+                    "BANK_PASS": decrypt_val(row.get('bank_password'))
                 })
             
             cur.close()
@@ -804,7 +842,10 @@ def check_status(page, account):
                             # No notification sent when reapply enabled but button missing (silent end)
                     else:
                         print(f"[{username}] Auto-reapply disabled. Sending rejection notification.")
-                        send_email_notification(account.get('EMAIL'), f"[MeroShare] Status: Rejected", f"Hi {username},\n\n{msg}\n\nTo reapply, please topup and the automation will retry in the next scheduled run.")
+                        subj = f"[MeroShare] Status: Rejected"
+                        body = f"Hi {username},\n\n{msg}\n\nTo reapply, please topup and the automation will retry in the next scheduled run."
+                        send_email_notification(account.get('EMAIL'), subj, body)
+                        send_push_notification(account.get('TOKENS'), subj, msg)
                 else:
                     print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
 
@@ -842,6 +883,30 @@ def run_automation():
 
             page = browser.new_page()
             try:
+                # 0. Bank Balance Check
+                if account.get('BANK_CODE') and account.get('BANK_PHONE') and account.get('BANK_PASS'):
+                    bank_page = browser.new_page()
+                    try:
+                        balance = check_balance(
+                            bank_code=account['BANK_CODE'],
+                            phone_number=account['BANK_PHONE'],
+                            password=account['BANK_PASS'],
+                            page=bank_page,
+                        )
+                    except Exception as e:
+                        print(f"[{username}] Warning: Bank balance check failed: {e}")
+                        balance = None
+                    finally:
+                        bank_page.close()
+
+                    if balance is not None and balance < MIN_BALANCE:
+                        print(f"[{username}] ⚠️ Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
+                        subj = "⚠️ Low Bank Balance!"
+                        msg = f"{username}: Rs.{balance:.2f} balance. Please top up to apply for IPO."
+                        send_email_notification(account.get('EMAIL'), subj, msg)
+                        send_push_notification(account.get('TOKENS'), subj, msg)
+                        continue
+
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
