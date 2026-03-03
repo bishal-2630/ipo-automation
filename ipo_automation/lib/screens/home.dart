@@ -105,42 +105,45 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAccountsTab() {
-    return FutureBuilder<List<Account>>(
-      future: api.getAccounts(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red)));
-        }
+    return Scaffold(
+      body: FutureBuilder<List<Account>>(
+        future: api.getAccounts(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red)));
+          }
 
-        final accounts = snapshot.data ?? [];
+          final accounts = snapshot.data ?? [];
 
-        if (accounts.isEmpty) {
-          return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
-        }
+          if (accounts.isEmpty) {
+            return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
+          }
 
-        return Scaffold(
-          body: ListView.builder(
-            padding: EdgeInsets.only(bottom: 80),
-            itemCount: accounts.length,
-            itemBuilder: (context, index) => _buildAccountCard(accounts[index]),
-          ),
-          floatingActionButton: FloatingActionButton(
-            heroTag: 'add_account',
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => AddAccountScreen()),
-              );
-              if (result == true) setState(() {});
-            },
-            child: Icon(Icons.add),
-            backgroundColor: Colors.deepPurple,
-          ),
-        );
-      },
+          return RefreshIndicator(
+            onRefresh: () async => setState(() {}),
+            child: ListView.builder(
+              padding: EdgeInsets.only(bottom: 80),
+              itemCount: accounts.length,
+              itemBuilder: (context, index) => _buildAccountCard(accounts[index]),
+            ),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'add_account',
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => AddAccountScreen()),
+          );
+          if (result == true) setState(() {});
+        },
+        child: Icon(Icons.add),
+        backgroundColor: Colors.deepPurple,
+      ),
     );
   }
 
