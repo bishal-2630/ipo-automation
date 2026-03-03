@@ -46,3 +46,35 @@ def send_email_notification(to_email, subject, message):
         print(f"Email Notification Sent to {to_email}")
     except Exception as e:
         print(f"Warning: Failed to send email notification to {to_email}: {e}")
+
+
+def send_push_notification(tokens, title, body):
+    """
+    Sends FCM Push Notification to list of tokens.
+    """
+    if not tokens:
+        return
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+
+        if not firebase_admin._apps:
+            # Look for config in default location
+            cred_path = os.path.join(os.path.dirname(__file__), "config", "firebase_vcc.json")
+            if os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+            else:
+                print(f"Warning: Firebase config not found at {cred_path}. Skipping push notification.")
+                return
+
+        message = messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            tokens=tokens,
+        )
+        response = messaging.send_multicast(message)
+        print(f"Push Notification Sent: {response.success_count} success, {response.failure_count} failure")
+        return response
+    except Exception as e:
+        print(f"Warning: Failed to send push notification: {e}")
