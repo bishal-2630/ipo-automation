@@ -363,47 +363,27 @@ def login(page, username, password, dp_name):
     print(f"Selecting DP: {dp_name}...")
     dp_target = dp_name.lower().strip()
 
-    # Strategy 1: JS programmatic select — triggers Angular form validation reliably
-    dp_selected = page.evaluate("""
-        (dpTarget) => {
-            const selects = Array.from(document.querySelectorAll('select'));
-            for (const sel of selects) {
-                const opts = Array.from(sel.options);
-                const match = opts.find(o => o.text.toLowerCase().includes(dpTarget));
-                if (match) {
-                    sel.value = match.value;
-                    ['input', 'change'].forEach(ev =>
-                        sel.dispatchEvent(new Event(ev, { bubbles: true }))
-                    );
-                    if (window.jQuery) {
-                        try { window.jQuery(sel).val(match.value).trigger('change'); } catch(e) {}
-                    }
-                    return match.text.trim();
-                }
-            }
-            return null;
-        }
-    """, dp_target)
-
-    if dp_selected:
-        print(f"  DP selected via JS: {dp_selected}")
-    else:
-        # Strategy 2: select2 UI — click container, type in search, click result
-        print(f"  JS select failed, trying select2 UI interaction...")
-        try:
-            page.locator(".select2-container, .select2-selection").first.click(timeout=10000)
-            page.wait_for_timeout(800)
-            page.locator(".select2-search__field, .select2-search input, .select2-dropdown input").first.fill(dp_name, timeout=5000)
-            page.wait_for_timeout(1000)
-            page.locator(".select2-results__option--highlighted, .select2-results__option").first.click(timeout=5000)
-            print(f"  DP selected via select2 UI.")
-        except Exception as e2:
-            print(f"  Warning: select2 UI interaction also failed: {e2}")
-            page.screenshot(path=f"debug_login_dp_{username}.png")
+    # Since MeroShare uses an Angular wrapper around Select2 (<select2>), 
+    # programmatic JS modifications bypass the Angular ngModel binding, 
+    # leaving the form invalid. We MUST interact via the UI.
+    try:
+        # 1. Click the select2 container to open the dropdown
+        page.locator(".select2-selection, .select2-selection--single").first.click(timeout=15000)
+        page.wait_for_timeout(1000)
+        
+        # 2. Type the DP name into the search box
+        search_box = page.locator(".select2-search__field, .select2-search input")
+        search_box.first.fill(dp_name, timeout=5000)
+        page.wait_for_timeout(1000)
+        
+        # 3. Press Enter to confirm (more reliable for Angular than clicking the option)
+        page.keyboard.press("Enter")
+        print(f"  DP selected via UI simulation.")
+    except Exception as e:
+        print(f"  Warning: UI DP selection failed: {e}")
+        page.screenshot(path=f"debug_login_dp_{username}.png")
 
     page.wait_for_timeout(1000)
-    page.mouse.click(0, 0)  # Blur dropdown to trigger form validation
-    page.wait_for_timeout(500)
 
     try:
         # Use a more flexible selector for username (ID, Name, or Placeholder)
