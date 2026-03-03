@@ -53,11 +53,16 @@ from cryptography.fernet import Fernet
 _ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "").encode()
 
 def decrypt(token: str) -> str:
-    if not token or not _ENCRYPTION_KEY:
+    if not token:
+        return token
+    if not _ENCRYPTION_KEY:
+        if token.startswith('gAAAAA'):
+            print("  ⚠️  WARNING: ENCRYPTION_KEY is not set, but token looks encrypted! MeroShare login will likely fail.")
         return token
     try:
         return Fernet(_ENCRYPTION_KEY).decrypt(token.encode()).decode()
-    except Exception:
+    except Exception as e:
+        print(f"  ⚠️  WARNING: Decryption failed (Key mismatch?): {e}")
         return token  # Not encrypted yet, return as-is
 
 # ── Main automation ─────────────────────────────────────────────────
