@@ -442,19 +442,27 @@ def login(page, username, password, dp_name):
         return False
 
     # Wait for Login button to become enabled before clicking
-    # (it stays disabled until DP + credentials are all properly filled)
+    # If Angular fails to enable it after 5s, we force it enabled.
     print(f"Clicking Login button for {username}...")
     try:
         page.wait_for_function(
             "() => { const btn = document.querySelector(\"button[type='submit'], button.sign-in, button:has-text('Login')\"); return btn && !btn.disabled; }",
-            timeout=15000
+            timeout=5000
         )
     except Exception:
-        # If still disabled after 15s, take a screenshot and bail gracefully
-        page.screenshot(path=f"debug_login_disabled_{username}.png")
-        print(f"[{username}] ⚠️ Login button still disabled after 15s — check DP selection.")
-        return False
-    page.click("button:has-text('Login'), button[type='submit'].sign-in")
+        print(f"[{username}] ⚠️ Login button still disabled after 5s. Forcing it to enable...")
+        page.evaluate("""
+            () => {
+                const btn = document.querySelector("button[type='submit'], button.sign-in, button:has-text('Login')");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.removeAttribute('disabled');
+                    btn.classList.remove('disabled');
+                }
+            }
+        """)
+        
+    page.click("button:has-text('Login'), button[type='submit'].sign-in", force=True)
     
     # Wait for navigation/dashboard
     try:

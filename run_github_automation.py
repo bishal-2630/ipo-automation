@@ -37,7 +37,7 @@ def send_push_notification(fcm_tokens: list, title: str, body: str):
         tokens=fcm_tokens,
     )
     try:
-        response = messaging.send_multicast(message)
+        response = messaging.send_each_for_multicast(message)
         print(f"  FCM: {response.success_count} sent, {response.failure_count} failed.")
     except Exception as e:
         print(f"  FCM error: {e}")
