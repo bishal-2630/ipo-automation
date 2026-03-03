@@ -519,9 +519,70 @@ def apply_ipo(page, account):
 
 def get_accounts():
     """
-    Retrieves accounts from environment variable (JSON) or local file.
+    Retrieves accounts from environment variable (JSON), PostgreSQL database, or local file.
     """
     accounts = []
+
+    # 1. Try Remote Database (PostgreSQL)
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        print("Connecting to remote database to fetch accounts...")
+        try:
+            import psycopg2
+            from cryptography.fernet import Fernet
+            
+            encryption_key = os.getenv("ENCRYPTION_KEY")
+            cipher = None
+            if encryption_key:
+                try:
+                    cipher = Fernet(encryption_key.encode())
+                except Exception as e:
+                    print(f"Warning: Invalid ENCRYPTION_KEY: {e}")
+
+            def decrypt_val(token):
+                if not token or not cipher:
+                    return token
+                try:
+                    return cipher.decrypt(token.encode()).decode()
+                except:
+                    return token
+
+            conn = psycopg2.connect(db_url)
+            cur = conn.cursor()
+            # Fetch accounts and join with auth_user to get the email
+            cur.execute("""
+                SELECT a.meroshare_user, a.meroshare_pass, a.dp_name, a.crn, a.tpin, a.bank_name, a.kitta, u.email
+                FROM automation_account a
+                LEFT JOIN auth_user u ON a.owner_id = u.id
+                WHERE a.is_active = True;
+            """)
+            
+            columns = [desc[0] for desc in cur.description]
+            db_rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+            
+            for row in db_rows:
+                accounts.append({
+                    "MEROSHARE_USER": row['meroshare_user'],
+                    "MEROSHARE_PASS": decrypt_val(row['meroshare_pass']),
+                    "DP_NAME": row['dp_name'],
+                    "CRN": row['crn'],
+                    "TPIN": row['tpin'],
+                    "BANK_NAME": row['bank_name'],
+                    "KITTA": str(row['kitta']),
+                    "EMAIL": row.get('email')
+                })
+            
+            cur.close()
+            conn.close()
+            if accounts:
+                print(f"Successfully loaded {len(accounts)} active account(s) from database.")
+                return accounts
+        except ImportError:
+            print("Warning: psycopg2 or cryptography not installed. Skipping database fetch.")
+        except Exception as e:
+            print(f"Warning: Failed to fetch accounts from database: {e}")
+
+    # 2. Try environment variable (JSON)
     accounts_env = os.getenv("ACCOUNTS_JSON")
     if accounts_env:
         try:
