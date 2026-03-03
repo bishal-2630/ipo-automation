@@ -14,7 +14,17 @@ MIN_BALANCE = 2000.0  # Minimum required balance to apply for IPO (Rs.)
 def _init_firebase():
     if not firebase_admin._apps:
         cred_path = os.path.join(os.path.dirname(__file__), "config", "firebase_vcc.json")
-        cred = credentials.Certificate(cred_path)
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+        else:
+            # Fallback: load from base64-encoded env variable (used on GitHub Actions)
+            import base64, json, tempfile
+            b64 = os.environ.get("FIREBASE_CREDENTIALS_B64", "")
+            if not b64:
+                print("  ⚠️  Firebase credentials not found (no file and no FIREBASE_CREDENTIALS_B64 env var). Skipping notifications.")
+                return
+            cred_json = json.loads(base64.b64decode(b64).decode())
+            cred = credentials.Certificate(cred_json)
         firebase_admin.initialize_app(cred)
 
 def send_push_notification(fcm_tokens: list, title: str, body: str):
