@@ -891,7 +891,15 @@ def run_automation():
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(
+            headless=headless,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-infobars',
+                '--no-sandbox',
+                '--window-size=1280,720'
+            ]
+        )
 
         for i, account in enumerate(accounts):
             username = account.get('MEROSHARE_USER')
@@ -1007,7 +1015,15 @@ def run_status_check():
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(
+            headless=headless,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-infobars',
+                '--no-sandbox',
+                '--window-size=1280,720'
+            ]
+        )
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         page = context.new_page()
 
@@ -1016,12 +1032,22 @@ def run_status_check():
             page.goto('https://iporesult.cdsc.com.np/', timeout=60000, wait_until='networkidle')
             
             # 1. Solve initial Bot Protection if it exists
-            if 'prevent automated spam submission' in page.content():
-                print("Bot protection detected. Solving...")
-                bot_captcha = solve_captcha_official(page, 'img', reader)
+            # The F5 WAF puts the captcha inside an iframe
+            bot_frame = None
+            for f in page.frames:
+                try:
+                    if 'prevent automated spam submission' in f.content():
+                        bot_frame = f
+                        break
+                except Exception:
+                    pass
+
+            if bot_frame:
+                print("Bot protection detected in iframe. Solving...")
+                bot_captcha = solve_captcha_official(bot_frame, 'img', reader)
                 if bot_captcha:
-                    page.locator('input[type="text"]').first.fill(bot_captcha)
-                    page.locator('input[type="submit"], button').first.click()
+                    bot_frame.locator('input[type="text"], input[name="answer"]').first.fill(bot_captcha)
+                    bot_frame.locator('input[type="submit"], button').first.click()
                     page.wait_for_timeout(3000)
 
             # 2. Get the list of companies
@@ -1043,9 +1069,9 @@ def run_status_check():
 
             print(f"Found {len(companies)} companies. Checking for latest results...")
             
-            # We usually only want to check the top 2-3 latest companies to save time
-            # or all of them if the user prefers. Let's check the first 2.
-            target_companies = companies[:2] 
+            # We usually only want to check the top latest company to save time.
+            # Let's check the first 1.
+            target_companies = companies[:1] 
 
             for company in target_companies:
                 print(f"\n--- Checking Result for: {company} ---")
