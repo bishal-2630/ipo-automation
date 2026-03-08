@@ -6,7 +6,10 @@ import json
 import random
 import string
 import secrets
-
+import re
+import datetime
+import psycopg2
+import logging
 from notifications import send_email_notification, send_push_notification
 from bank_checkers.bank import check_balance
 from expiry_handler import (
@@ -14,19 +17,9 @@ from expiry_handler import (
     check_account_expiry_warning,
     handle_expired_account,
 )
-import re
-import datetime
-import psycopg2
-import warnings
-import cv2
-import numpy as np
-import easyocr
 
-# Suppress noisy warnings (like torch dataloader)
-warnings.filterwarnings("ignore", category=UserWarning)
-
-# Initialize EasyOCR once at module level to avoid redundant downloads/loading
-READER = easyocr.Reader(['en'], gpu=False, verbose=False)
+# Silence playwright logs
+logging.getLogger('playwright').setLevel(logging.ERROR)
 
 # Load environment variables
 load_dotenv()
@@ -983,113 +976,10 @@ def run_automation():
         print("\nAll accounts processed.")
 
 
-def solve_captcha_official(page_or_frame, selector):
-    """
-    Utility to capture and solve a captcha on a page.
-    Tries multiple specialized image processing strategies to solve noisy captchas.
-    """
-    try:
-        captcha_img = page_or_frame.locator(selector).first
-        if not captcha_img.is_visible(timeout=5000):
-            return None
-        
-        img_path = f"temp_captcha_{int(time.time())}.png"
-        captcha_img.screenshot(path=img_path)
-        
-        img = cv2.imread(img_path)
-        if img is None:
-            return None
-            
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        # Strategies to try on the current captcha image
-        def try_ocr(processed_img, label):
-            cv2.imwrite(img_path, processed_img)
-            # Use the global READER
-            results = READER.readtext(img_path, allowlist='0123456789')
-            if results:
-                res = ''.join([text for _, text, _ in results if text])
-                res = ''.join([c for c in res if c.isdigit()])
-                if len(res) == 5:
-                    print(f"   [Strategy: {label}] Solved: {res}")
-                    return res
-                elif len(res) >= 4:
-                    # Might be missing one digit, but let's log it
-                    pass
-            return None
-
-        # Upscale 4x with Lanczos for better edge preservation
-        up4x = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_LANCZOS4)
-        
-        # 1. Standard Denoise + Multiple Thresholds
-        smooth = cv2.bilateralFilter(up4x, 9, 75, 75)
-        for th in [120, 150, 180]:
-            _, thresh = cv2.threshold(smooth, th, 255, cv2.THRESH_BINARY)
-            res = try_ocr(thresh, f"Thresh-{th}")
-            if res: 
-                if os.path.exists(img_path): os.remove(img_path)
-                return res
-
-        # 2. Median Blur (Effective for grids)
-        median = cv2.medianBlur(up4x, 5)
-        _, thresh_m = cv2.threshold(median, 150, 255, cv2.THRESH_BINARY)
-        res = try_ocr(thresh_m, "Median-5")
-        if res:
-            if os.path.exists(img_path): os.remove(img_path)
-            return res
-
-        # 3. Sharpening
-        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-        sharpened = cv2.filter2D(up4x, -1, kernel)
-        res = try_ocr(sharpened, "Sharpened")
-        if res:
-            if os.path.exists(img_path): os.remove(img_path)
-            return res
-
-        # 4. Adaptive Thresholding
-        adaptive = cv2.adaptiveThreshold(median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-        res = try_ocr(adaptive, "Adaptive")
-        if res:
-            if os.path.exists(img_path): os.remove(img_path)
-            return res
-
-        # 5. Morphological Opening (Grid Cleaning)
-        kernel_clean = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        opened = cv2.morphologyEx(thresh_m, cv2.MORPH_OPEN, kernel_clean)
-        res = try_ocr(opened, "MorphOpened")
-        if res:
-            if os.path.exists(img_path): os.remove(img_path)
-            return res
-
-        # 6. Advanced Grid Subtraction
-        # threshold INV to get grid + text as white
-        _, binary_inv = cv2.threshold(up4x, 150, 255, cv2.THRESH_BINARY_INV)
-        # detect vertical lines
-        v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-        v_lines = cv2.morphologyEx(binary_inv, cv2.MORPH_OPEN, v_kernel, iterations=2)
-        # detect horizontal lines
-        h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-        h_lines = cv2.morphologyEx(binary_inv, cv2.MORPH_OPEN, h_kernel, iterations=2)
-        # subtract grid from text
-        grid = cv2.add(v_lines, h_lines)
-        subtracted = cv2.subtract(binary_inv, grid)
-        # invert back and solve
-        clean_final = cv2.bitwise_not(subtracted)
-        res = try_ocr(clean_final, "GridSubtraction")
-        if res:
-            if os.path.exists(img_path): os.remove(img_path)
-            return res
-
-        if os.path.exists(img_path):
-            os.remove(img_path)
-        return None
-    except Exception as e:
-        print(f"Error solving captcha: {e}")
-        return None
 
 def run_status_check():
     """
-    Official Result Check: Navigates to iporesult.cdsc.com.np
+    Captcha-Free Result Check: Navigates to iporesult.nepsebajar.com
     Checks for each account's BOID against available companies.
     """
     accounts = get_accounts()
@@ -1097,210 +987,126 @@ def run_status_check():
         print("Error: No accounts found.")
         return
 
-    print(f"🔍 Official Status Check: Processing {len(accounts)} account(s)...")
+    print(f"🔍 Status Check (Captcha-Free): Processing {len(accounts)} account(s)...")
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
         browser = p.chromium.launch(
             headless=headless,
-            args=[
-                '--disable-blink-features=AutomationControlled',
-                '--disable-infobars',
-                '--no-sandbox',
-                '--window-size=1280,720'
-            ]
+            args=['--no-sandbox', '--disable-setuid-sandbox']
         )
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         page = context.new_page()
 
         try:
-            print("Navigating to https://iporesult.cdsc.com.np/...")
-            page.goto('https://iporesult.cdsc.com.np/', timeout=60000, wait_until='networkidle')
+            print("Navigating to https://iporesult.nepsebajar.com/...")
+            # Use domcontentloaded for a faster response on ad-heavy sites
+            page.goto('https://iporesult.nepsebajar.com/', timeout=30000, wait_until='domcontentloaded')
+            page.wait_for_timeout(3000)
             
-            # Simple Bot Protection check (less aggressive)
-            bot_frame = None
-            for f in page.frames:
-                if "challenge" in f.url or "captcha" in f.url:
-                    bot_frame = f
-                    break
-            
-            if bot_frame:
-                print("Potential bot protection frame detected by URL. Attempting solve...")
-                bot_captcha = solve_captcha_official(bot_frame, 'img')
-                if bot_captcha:
-                    bot_frame.locator('input[type="text"]').first.fill(bot_captcha)
-                    bot_frame.locator('input[type="submit"], button').first.click()
-                    page.wait_for_timeout(3000)
-
-            # 2. Get the list of companies
+            # 1. Get the list of companies from the dropdown
             try:
-                page.wait_for_selector('ng-select', timeout=20000)
-                page.click('ng-select', force=True)
-                page.wait_for_timeout(2000)
+                page.wait_for_selector('select#company_id', timeout=20000)
+                companies = page.evaluate("""
+                    () => {
+                        const select = document.querySelector('select#company_id');
+                        if (!select) return [];
+                        const options = Array.from(select.options);
+                        return options.map(o => ({ id: o.value, name: o.innerText.trim() }))
+                                      .filter(o => o.id !== '' && o.name !== '');
+                    }
+                """)
             except Exception as e:
-                print(f"Error: CDSC landing page not loaded correctly: {e}")
-                page.screenshot(path="cdsc_landing_error.png")
-                browser.close()
+                print(f"Error: Nepsebajar page not loaded correctly: {e}")
+                page.screenshot(path="nepsebajar_error.png")
                 return
 
-            # 2. Get the list of companies
-            try:
-                page.wait_for_selector('ng-select', timeout=20000)
-                page.click('ng-select', force=True)
-                page.wait_for_timeout(2000)
-            except Exception as e:
-                print(f"Error: CDSC landing page not loaded correctly: {e}")
-                page.screenshot(path="cdsc_landing_error.png")
-                browser.close()
-                return
-
-            companies = page.evaluate("""
-                () => {
-                    const items = Array.from(document.querySelectorAll('.ng-option'));
-                    return items.map(el => el.innerText.trim()).filter(t => t !== '');
-                }
-            """)
-            
             if not companies:
                 print("No companies found in the list.")
-                page.screenshot(path="no_companies_found.png")
-                browser.close()
                 return
 
-            print(f"Found {len(companies)} companies. Checking for latest results...")
+            print(f"Found {len(companies)} companies. Checking latest results...")
             
-            # We usually only want to check the top latest company to save time.
-            # Let's check the first 1.
+            # Check the top 1 company for each account
             target_companies = companies[:1] 
 
-            for company in target_companies:
-                print(f"\n--- Checking Result for: {company} ---")
+            for company_obj in target_companies:
+                company_id = company_obj['id']
+                company_name = company_obj['name']
+                print(f"\n--- Checking Result for: {company_name} ---")
                 
                 # Select the company
-                page.click('ng-select')
-                page.wait_for_timeout(500)
-                page.type('input[type="text"]', company)
-                page.keyboard.press('Enter')
-                page.wait_for_timeout(500)
+                page.select_option('select#company_id', company_id)
+                page.wait_for_timeout(1000)
 
                 for account in accounts:
                     username = account.get('MEROSHARE_USER')
                     boid = account.get('BOID')
-                    feedback = "" # Initialize here to avoid UnboundLocalError
+                    feedback = ""
                     
                     if not boid:
-                        # Try to extract BOID from MeroShare if missing? 
-                        # For now, we assume it's in the DB.
                         print(f"[{username}] Skipping: No BOID provided.")
                         continue
 
                     print(f"[{username}] Checking BOID: {boid}...")
                     
                     # Fill BOID
-                    page.fill('input[name="boid"]', boid)
+                    page.fill('input#demat_number', boid)
+                    page.wait_for_timeout(300)
                     
-                    # Solve Captcha with Retry Loop
-                    captcha_val = None
-                    for attempt in range(10):
-                        # Proactively remove F5 challenge iframes that intercept events
-                        page.evaluate("""() => {
-                            const iframes = document.querySelectorAll('iframe');
-                            iframes.forEach(iframe => {
-                                if (iframe.id && iframe.id.includes('TSBrPFrame')) {
-                                    iframe.remove();
-                                }
-                            });
-                        }""")
-
-                        captcha_val = solve_captcha_official(page, 'img[alt="captcha"]')
-                        if captcha_val and len(captcha_val) == 5:
-                            print(f"[{username}] Successfully solved captcha potentially: {captcha_val}")
-                            page.fill('input[name="userCaptcha"]', captcha_val)
-                            
-                            # Click Submit
-                            page.click('button[type="submit"]', force=True)
-                            page.wait_for_timeout(3000)
-                            
-                            # Check if invalid captcha message appeared
-                            invalid_msg = page.locator('.text-danger b').first
-                            if invalid_msg.is_visible() and "invalid captcha" in invalid_msg.inner_text().lower():
-                                print(f"[{username}] Invalid captcha ({captcha_val}). Refreshing and retrying...")
-                                # Click Reload Button
-                                reload_btn = page.locator('button[tooltip*="Reload"], button:has(.bi-arrow-counterclockwise)').first
-                                if reload_btn.is_visible():
-                                    reload_btn.click(force=True)
-                                    page.wait_for_timeout(2000)
-                                    continue
-                                else:
-                                    break
-                            else:
-                                # Captcha was accepted (or some other result)
-                                break
-                        else:
-                            print(f"[{username}] Captcha solve failed or too short ({captcha_val}). Refreshing...")
-                            # Click Reload Button
-                            reload_btn = page.locator('button[tooltip*="Reload"], button:has(.bi-arrow-counterclockwise)').first
-                            if reload_btn.is_visible():
-                                reload_btn.click(force=True)
-                                page.wait_for_timeout(2000)
-                            else:
-                                break
-
-                    if not captcha_val or len(captcha_val) != 5:
-                        print(f"[{username}] Failed to solve captcha after 10 attempts (Last: {captcha_val}). Skipping.")
-                        continue
+                    # Click Check Result (Captcha-Free!)
+                    btn = page.locator('button:has-text("Check"), button.bg-blue-600').first
+                    btn.click(force=True)
                     
-                    # Already submitted inside the loop if successful.
-                    # No need to fill or click again here.
+                    # Wait for results modal or content change
+                    page.wait_for_timeout(4000)
 
-                    # Check Response
-                    try:
-                        # CDSC uses .text-success for Allotted and .text-danger for Not Allotted
-                        # Wait for the element to be visible AND have non-empty text
-                        page.wait_for_function('''() => {
-                            const b = document.querySelector(".text-success b, .text-danger b");
-                            return b && b.innerText.trim().length > 0;
-                        }''', timeout=10000)
-                        
-                        result_msg_loc = page.locator('.text-success b, .text-danger b').first
-                        feedback = result_msg_loc.inner_text().strip()
-                        print(f"[{username}] Result: {feedback}")
-                        
-                        # Screenshot for proof
-                        page.screenshot(path=f"result_check_{username}.png")
-                        
-                        # Notification logic
-                        if "congratulations" in feedback.lower() or "allotted" in feedback.lower() and "not allotted" not in feedback.lower():
-                            # Parse quantity if possible (e.g., "Allotted: 10")
-                            qty_match = re.search(r'(\d+)', feedback)
-                            qty = qty_match.group(1) if qty_match else "10"
-                            msg = f"🎉 ALLOTTED! You have been allotted {qty} shares of {company}."
-                            subj = f"[MeroShare] Result: ALLOTTED!"
-                            send_email_notification(account.get('EMAIL'), subj, msg)
-                            send_push_notification(account.get('TOKENS'), subj, msg)
-                        elif "not allotted" in feedback.lower() or "sorry" in feedback.lower():
-                            msg = f"ℹ️ Result for {company}: Not Allotted."
-                            subj = f"[MeroShare] Result: Not Allotted"
-                            send_push_notification(account.get('TOKENS'), subj, msg)
-                    except Exception as e:
-                        print(f"[{username}] Error checking result or wrong captcha: {e}")
-                        page.screenshot(path=f"result_error_{username}.png")
-                        
-                    # Clear for next account? Usually the page resets or we just overwrite.
-                    page.locator('input[name="boid"]').clear()
-                    page.locator('input[id*="captcha"], input[placeholder*="Captcha"]').clear()
+                    # Extract status from modal or page
+                    res = page.evaluate("""
+                        () => {
+                            const modal = document.querySelector('.modal-content, .modal, [class*="modal"]');
+                            return modal ? modal.innerText : document.body.innerText;
+                        }
+                    """)
+                    
+                    if "Not Allotted" in res or "not alloted" in res.lower():
+                        feedback = "Not Allotted"
+                    elif "Allotted" in res or "congratulations" in res.lower():
+                        feedback = "Allotted"
+                        # Try to extract Kitta
+                        kitta_match = re.search(r'(\d+)\s*Kitta', res)
+                        if kitta_match:
+                            feedback = f"Allotted: {kitta_match.group(1)} Kitta"
+                    else:
+                        feedback = "Unknown"
+
+                    print(f"[{username}] Result: {feedback}")
+                    
+                    # Notification logic
+                    if "Not Allotted" in feedback:
+                        msg = f"{company_name} has not been alloted."
+                        subj = f"[IPO Result] Not Allotted"
+                        send_push_notification(account.get('TOKENS'), subj, msg)
+                    elif "Allotted" in feedback:
+                        msg = f"🎉 ALLOTTED! You have been allotted {feedback.split(':')[-1].strip() if ':' in feedback else 'some'} shares of {company_name}."
+                        subj = f"[IPO Result] ALLOTTED!"
+                        send_push_notification(account.get('TOKENS'), subj, msg)
+
+                    # Reset modal/state if needed (Escape usually works for modals)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(500)
 
                     # Save to Database Log
-                    if os.getenv("DATABASE_URL"):
+                    if os.getenv("DATABASE_URL") and feedback != "Unknown":
                         try:
                             conn = psycopg2.connect(os.getenv("DATABASE_URL"))
                             cur = conn.cursor()
-                            status_val = "Allotted" if ("Congratulations" in feedback or "Allotted" in feedback) else "Not Allotted"
+                            status_val = "Allotted" if "Allotted" in feedback else "Not Allotted"
                             cur.execute("""
                                 INSERT INTO automation_applicationlog
                                     (account_id, company_name, status, remark, timestamp, is_read)
                                 VALUES (%s, %s, %s, %s, %s, %s)
-                            """, (account.get('ID'), company, status_val, feedback,
+                            """, (account.get('ID'), company_name, status_val, feedback,
                                   datetime.datetime.now(datetime.timezone.utc), False))
                             conn.commit()
                             cur.close()
@@ -1314,7 +1120,7 @@ def run_status_check():
         finally:
             browser.close()
     
-    print("\nOfficial status check run complete.")
+    print("\nCaptcha-free status check run complete.")
 
 
 if __name__ == "__main__":
