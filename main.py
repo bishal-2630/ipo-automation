@@ -1,4 +1,5 @@
-from playwright.sync_api import sync_playwright
+
+# Deferred playwright imports to prevent crash on environments without playwright (like Vercel)
 from dotenv import load_dotenv
 import os
 import time
@@ -887,6 +888,7 @@ def run_automation():
     count = len(accounts)
     print(f"Found {count} account(s) to process.")
 
+    from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
         browser = p.chromium.launch(headless=headless)
@@ -994,10 +996,11 @@ def run_status_check():
     Checks for each account's BOID against available companies.
     """
     try:
+        from playwright.sync_api import sync_playwright
         import easyocr
-    except ImportError:
-        print("❌ Error: 'easyocr' is not installed. This mode requires 'easyocr'.")
-        print("Please install it using: pip install easyocr")
+    except ImportError as e:
+        print(f"❌ Error: Missing dependency ({e}). This mode requires 'playwright' and 'easyocr'.")
+        print("Please install them using: pip install -r requirements_automation.txt")
         return
 
     accounts = get_accounts()
