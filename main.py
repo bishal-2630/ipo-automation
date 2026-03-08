@@ -17,6 +17,10 @@ from expiry_handler import (
 import re
 import datetime
 import psycopg2
+import warnings
+
+# Suppress noisy warnings (like torch dataloader)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Load environment variables
 load_dotenv()
@@ -1007,17 +1011,17 @@ def solve_captcha_official(page_or_frame, selector, reader):
 
         # 1. Standard Denoise + Threshold
         smooth = cv2.bilateralFilter(gray, 9, 75, 75)
-        up3x = cv2.resize(smooth, None, fx=3, fy=3, interpolation=cv2.INTER_LINEAR)
+        up4x = cv2.resize(smooth, None, fx=4, fy=4, interpolation=cv2.INTER_LANCZOS4)
         
         for th in [120, 150, 180]:
-            _, thresh = cv2.threshold(up3x, th, 255, cv2.THRESH_BINARY)
+            _, thresh = cv2.threshold(up4x, th, 255, cv2.THRESH_BINARY)
             res = try_ocr(thresh, f"Thresh-{th}")
             if res: 
                 if os.path.exists(img_path): os.remove(img_path)
                 return res
 
         # 2. Median Blur (Effective for grids)
-        median = cv2.medianBlur(up3x, 5)
+        median = cv2.medianBlur(up4x, 5)
         _, thresh_m = cv2.threshold(median, 150, 255, cv2.THRESH_BINARY)
         res = try_ocr(thresh_m, "Median")
         if res:
@@ -1026,7 +1030,7 @@ def solve_captcha_official(page_or_frame, selector, reader):
 
         # 3. Sharpening
         kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-        sharpened = cv2.filter2D(up3x, -1, kernel)
+        sharpened = cv2.filter2D(up4x, -1, kernel)
         res = try_ocr(sharpened, "Sharpened")
         if res:
             if os.path.exists(img_path): os.remove(img_path)
@@ -1035,6 +1039,15 @@ def solve_captcha_official(page_or_frame, selector, reader):
         # 4. Adaptive Thresholding
         adaptive = cv2.adaptiveThreshold(median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
         res = try_ocr(adaptive, "Adaptive")
+        if res:
+            if os.path.exists(img_path): os.remove(img_path)
+            return res
+
+        # 5. Morphological Opening (Grid Cleaning)
+        # Using a slightly larger kernel to eat the grid lines
+        kernel_clean = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        opened = cv2.morphologyEx(thresh_m, cv2.MORPH_OPEN, kernel_clean)
+        res = try_ocr(opened, "MorphOpened")
         if res:
             if os.path.exists(img_path): os.remove(img_path)
             return res
@@ -1059,7 +1072,7 @@ def run_status_check():
     print(f"🔍 Official Status Check: Processing {len(accounts)} account(s)...")
     
     import easyocr
-    reader = easyocr.Reader(['en'], gpu=False)
+    reader = easyocr.Reader(['en'], gpu=False, verbose=False)
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
