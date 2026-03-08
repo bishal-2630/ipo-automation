@@ -1,0 +1,7 @@
+easyocr
+playwright
+python-dotenv
+psycopg2-binary
+cryptography
+django
+djangorestframework

@@ -14,7 +14,6 @@ from expiry_handler import (
     check_account_expiry_warning,
     handle_expired_account,
 )
-import easyocr
 import re
 
 # Load environment variables
@@ -994,6 +993,13 @@ def run_status_check():
     Official Result Check: Navigates to iporesult.cdsc.com.np
     Checks for each account's BOID against available companies.
     """
+    try:
+        import easyocr
+    except ImportError:
+        print("❌ Error: 'easyocr' is not installed. This mode requires 'easyocr'.")
+        print("Please install it using: pip install easyocr")
+        return
+
     accounts = get_accounts()
     if not accounts:
         print("Error: No accounts found.")
