@@ -1,0 +1,38 @@
+name: Daily IPO Status Check (Official)
+
+on:
+  schedule:
+    - cron: '15 6 * * *'  # 12:00 PM NPT (06:15 UTC)
+  workflow_dispatch:      # Allow manual triggering
+
+jobs:
+  check-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-glx libglib2.0-0
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_automation.txt
+          playwright install chromium
+
+      - name: Run Status Check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          FIREBASE_CREDENTIALS_B64: ${{ secrets.FIREBASE_CREDENTIALS_B64 }}
+          RUN_MODE: check_status
+          HEADLESS: "true"
+        run: python main.py

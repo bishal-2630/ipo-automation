@@ -14,7 +14,6 @@ from expiry_handler import (
     check_account_expiry_warning,
     handle_expired_account,
 )
-import easyocr
 import re
 
 # Load environment variables
@@ -1001,6 +1000,7 @@ def run_status_check():
 
     print(f"🔍 Official Status Check: Processing {len(accounts)} account(s)...")
     
+    import easyocr
     reader = easyocr.Reader(['en'], gpu=False)
 
     with sync_playwright() as p:
