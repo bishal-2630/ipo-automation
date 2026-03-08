@@ -1,0 +1,34 @@
+name: Check IPO Results
+
+on:
+  schedule:
+    - cron: '30 14 * * *'  # 8:15 PM NPT (14:30 UTC)
+  workflow_dispatch:      # Allow manual triggering
+
+jobs:
+  check-results:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: user-part-1
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright python-dotenv psycopg2-binary firebase-admin
+          playwright install chromium
+
+      - name: Run IPO Result Check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FIREBASE_CREDENTIALS_B64: ${{ secrets.FIREBASE_CREDENTIALS_B64 }}
+          RUN_MODE: "check_status"
+          HEADLESS: "true"
+        run: python main.py
