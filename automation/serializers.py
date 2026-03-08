@@ -15,7 +15,7 @@ class AccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Account
-        fields = '__all__'
+        fields = ['id', 'meroshare_user', 'meroshare_pass', 'boid', 'dp_name', 'crn', 'tpin', 'bank_name', 'kitta', 'is_active', 'last_applied']
         read_only_fields = ['owner']
 
     def create(self, validated_data):
