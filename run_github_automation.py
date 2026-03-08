@@ -95,7 +95,15 @@ def run_automation():
         print(f"Found {len(accounts)} active accounts. Starting automation...")
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-infobars',
+                    '--no-sandbox',
+                    '--window-size=1280,720'
+                ]
+            )
 
             for acc in accounts:
                 print(f"\n{'='*50}")
