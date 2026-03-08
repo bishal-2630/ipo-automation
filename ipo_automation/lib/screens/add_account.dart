@@ -25,6 +25,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _crnController = TextEditingController();
   final _pinController = TextEditingController();
   final _bankController = TextEditingController();
+  final _boidController = TextEditingController();
 
   bool get isEditMode => widget.account != null;
 
@@ -37,7 +38,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _dpController.text = acc.bank;
       _crnController.text = acc.crn;
       _pinController.text = acc.tPin;
-      _bankController.text = acc.bank; // Note: Check if model.bank is bank_name
+      _bankController.text = acc.bank;
+      _boidController.text = acc.boid;
       _isActive = acc.isActive;
     }
   }
@@ -52,6 +54,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           'crn': _crnController.text,
           'tpin': _pinController.text,
           'bank_name': _bankController.text,
+          'boid': _boidController.text,
           'is_active': _isActive,
         };
 
@@ -123,6 +126,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 ),
               ),
               _buildTextField(_dpController, "DP Name (e.g., GLOBAL IME BANK)"),
+              _buildTextField(_boidController, "16-Digit BOID", keyboardType: TextInputType.number),
               _buildTextField(_crnController, "CRN Number"),
               _buildTextField(_pinController, "4-Digit PIN", keyboardType: TextInputType.number),
               _buildTextField(_bankController, "Bank Name"),
@@ -182,6 +186,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _crnController.dispose();
     _pinController.dispose();
     _bankController.dispose();
+    _boidController.dispose();
     super.dispose();
   }
 }

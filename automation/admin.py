@@ -3,7 +3,7 @@ from .models import Account, ApplicationLog, FCMToken
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
-    list_display = ('meroshare_user', 'dp_name', 'bank_name', 'last_applied', 'is_active')
+    list_display = ('meroshare_user', 'boid', 'dp_name', 'bank_name', 'last_applied', 'is_active')
     search_fields = ('meroshare_user', 'dp_name')
 
 @admin.register(ApplicationLog)

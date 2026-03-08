@@ -6,6 +6,7 @@ class Account {
   final bool isActive;
   final String crn;
   final String tPin;
+  final String boid;
 
   Account({
     required this.id,
@@ -15,6 +16,7 @@ class Account {
     required this.isActive,
     required this.crn,
     required this.tPin,
+    required this.boid,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class Account {
       isActive: json['is_active'],
       crn: json['crn'] ?? '',
       tPin: json['tpin'] ?? '',
+      boid: json['boid'] ?? '',
     );
   }
 }
