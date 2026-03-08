@@ -125,7 +125,7 @@ class HealthView(APIView):
             
         return Response({
             "status": "online",
-            "version": "v3.17-final",
+            "version": "v3.18-final",
             "encryption_key_length": len(key),
             "encryption_key_valid": key_valid,
             "encryption_error": error_msg,
