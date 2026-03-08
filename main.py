@@ -1148,6 +1148,7 @@ def run_status_check():
                 for account in accounts:
                     username = account.get('MEROSHARE_USER')
                     boid = account.get('BOID')
+                    feedback = "" # Initialize here to avoid UnboundLocalError
                     
                     if not boid:
                         # Try to extract BOID from MeroShare if missing? 
@@ -1207,20 +1208,22 @@ def run_status_check():
                             else:
                                 break
 
-                    if not captcha_val:
-                        print(f"[{username}] Failed to solve captcha after 10 attempts. Skipping.")
+                    if not captcha_val or len(captcha_val) != 5:
+                        print(f"[{username}] Failed to solve captcha after 10 attempts (Last: {captcha_val}). Skipping.")
                         continue
                     
-                    page.fill('input[name="userCaptcha"], input[id*="captcha"], input[placeholder*="Captcha"]', captcha_val)
-                    
-                    # Submit
-                    page.click('button[type="submit"], button:has-text("View Result")', force=True)
-                    page.wait_for_timeout(2000)
+                    # Already submitted inside the loop if successful.
+                    # No need to fill or click again here.
 
                     # Check Response
                     try:
                         # CDSC uses .text-success for Allotted and .text-danger for Not Allotted
-                        page.wait_for_selector('.text-success b, .text-danger b', timeout=8000)
+                        # Wait for the element to be visible AND have non-empty text
+                        page.wait_for_function('''() => {
+                            const b = document.querySelector(".text-success b, .text-danger b");
+                            return b && b.innerText.trim().length > 0;
+                        }''', timeout=10000)
+                        
                         result_msg_loc = page.locator('.text-success b, .text-danger b').first
                         feedback = result_msg_loc.inner_text().strip()
                         print(f"[{username}] Result: {feedback}")
