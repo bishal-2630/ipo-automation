@@ -113,6 +113,8 @@ class HealthView(APIView):
     def get(self, request):
         import os
         from cryptography.fernet import Fernet
+        from .models import Account
+        
         key = os.environ.get("ENCRYPTION_KEY", "").strip()
         key_valid = False
         error_msg = None
@@ -123,13 +125,17 @@ class HealthView(APIView):
         except Exception as e:
             error_msg = str(e)
             
+        # Get model fields for diagnostics
+        account_fields = [f.name for f in Account._meta.get_fields()]
+        
         return Response({
             "status": "online",
-            "version": "v3.25-stable",
+            "version": "v3.26-diag",
             "encryption_key_length": len(key),
             "encryption_key_valid": key_valid,
             "encryption_error": error_msg,
-            "branch": "user-part-1"
+            "branch": "user-part-1",
+            "account_model_fields": account_fields
         })
 
 def home_view(request):
