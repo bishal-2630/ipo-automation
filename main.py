@@ -62,11 +62,12 @@ def update_local_account_password(username, new_password):
     """
     Updates the password for a specific user in the local accounts.json file.
     """
-    if not os.path.exists("accounts.json"):
+    accounts_file = os.getenv("ACCOUNTS_FILE", "accounts.json")
+    if not os.path.exists(accounts_file):
         return False
 
     try:
-        with open("accounts.json", "r") as f:
+        with open(accounts_file, "r") as f:
             accounts = json.load(f)
         
         updated = False
@@ -76,9 +77,9 @@ def update_local_account_password(username, new_password):
                 updated = True
         
         if updated:
-            with open("accounts.json", "w") as f:
+            with open(accounts_file, "w") as f:
                 json.dump(accounts, f, indent=4)
-            print(f"Successfully updated local accounts.json for {username}")
+            print(f"Successfully updated local {accounts_file} for {username}")
             return True
     except Exception as e:
         print(f"Warning: Failed to update local accounts.json: {e}")
@@ -112,7 +113,7 @@ def handle_password_reset(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User
-                msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
+                msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update in GitHub secrets."
                 send_email_notification(account.get('EMAIL'), f"[MeroShare] Password Reset Successful", msg)
                 
                 # Update local file
@@ -543,12 +544,13 @@ def get_accounts():
         except json.JSONDecodeError:
             print("Error: Error decoding ACCOUNTS_JSON environment variable.")
 
-    if not accounts and os.path.exists("accounts.json"):
+    accounts_file = os.getenv("ACCOUNTS_FILE", "accounts.json")
+    if not accounts and os.path.exists(accounts_file):
         try:
-            with open("accounts.json", "r") as f:
+            with open(accounts_file, "r") as f:
                 accounts = json.load(f)
         except json.JSONDecodeError:
-            print("Error: Error decoding local accounts.json file.")
+            print(f"Error: Error decoding local {accounts_file} file.")
 
     if not accounts and os.getenv("MEROSHARE_USER"):
         accounts = [{
@@ -672,7 +674,7 @@ def check_status(page, account):
                 if clicked_info.get('mode', '').lower() == 'edit':
                     print(f"[{username}] 'Edit' mode detected from list view. Filling form...")
                     fill_and_submit_form(page, account, company_name=target_ipo)
-                    page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                    page.goto(f"{os.getenv('MEROSHARE_URL', 'https://meroshare.cdsc.com.np')}/#/asba/report", wait_until='networkidle')
                     continue
 
                 page.wait_for_load_state('networkidle')
@@ -750,7 +752,7 @@ def check_status(page, account):
                             page.wait_for_load_state('networkidle')
                             # fill_and_submit_form handles its own success/failure notifications
                             fill_and_submit_form(page, account, company_name=target_ipo)
-                            page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                            page.goto(f"{os.getenv('MEROSHARE_URL', 'https://meroshare.cdsc.com.np')}/#/asba/report", wait_until='networkidle')
                             continue
                         else:
                             print(f"[{username}] No reapply button found for rejected IPO. Ending silently.")
@@ -768,7 +770,7 @@ def check_status(page, account):
 
             except Exception as e:
                 print(f"[{username}] Error checking {target_ipo}: {e}")
-                page.goto("https://meroshare.cdsc.com.np/#/asba/report", wait_until='networkidle')
+                page.goto(f"{os.getenv('MEROSHARE_URL', 'https://meroshare.cdsc.com.np')}/#/asba/report", wait_until='networkidle')
 
     except Exception as e:
         print(f"[{username}] Fatal error in check_status: {e}")
@@ -795,9 +797,10 @@ def run_automation():
 
             page = browser.new_page()
             try:
-                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
+                page.goto(os.getenv("MEROSHARE_URL", "https://meroshare.cdsc.com.np"), timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
+                reset_done = False
                 for attempt in range(1, MAX_RETRIES + 1):
                     login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
                     if login_result is True:
@@ -806,11 +809,11 @@ def run_automation():
                         break
                     elif login_result == "EXPIRED":
                         if handle_password_reset(page, account):
-                            print(f"[{username}] Password successfully reset and logged in.")
-                            logged_in = True
+                            print(f"[{username}] Password successfully reset. Please re-run the script to apply for IPO.")
+                            reset_done = True
                         else:
                             print(f"[{username}] Password reset failed.")
-                        break # Don't retry login if expired/reset attempted
+                        break # Exit login loop
                     else:
                         print(f"Error: [{username}] Login failed (Attempt {attempt}). Retrying...")
                         page.reload()
@@ -819,6 +822,9 @@ def run_automation():
 
                 if logged_in:
                     apply_ipo(page, account)
+                elif reset_done:
+                    # Silent exit for this account as instructions were already printed
+                    pass
                 else:
                     print(f"Error: [{username}] Failed to login after {MAX_RETRIES} attempts.")
 
@@ -857,9 +863,10 @@ def run_status_check():
 
             page = browser.new_page()
             try:
-                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
+                page.goto(os.getenv("MEROSHARE_URL", "https://meroshare.cdsc.com.np"), timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
+                reset_done = False
                 for attempt in range(1, MAX_RETRIES + 1):
                     login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
                     if login_result is True:
@@ -867,7 +874,8 @@ def run_status_check():
                         break
                     elif login_result == "EXPIRED":
                         if handle_password_reset(page, account):
-                            logged_in = True
+                            print(f"[{username}] Password successfully reset. Please re-run the script to check status.")
+                            reset_done = True
                         break
                     else:
                         page.reload()
@@ -876,6 +884,8 @@ def run_status_check():
 
                 if logged_in:
                     check_status(page, account)
+                elif reset_done:
+                    pass
                 else:
                     print(f"Error: [{username}] Could not log in for status check.")
 

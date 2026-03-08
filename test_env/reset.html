@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>MeroShare - Change Password</title>
+    <style>
+        .toast-success {
+            color: green;
+            border: 1px solid green;
+            padding: 10px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Change Password</h1>
+    <p>Your password has expired. Please change it.</p>
+    <input type="password" id="oldPassword" placeholder="Old Password">
+    <input type="password" id="newPassword" placeholder="New Password">
+    <input type="password" id="confirmPassword" placeholder="Confirm Password">
+    <button id="btnChange" onclick="showSuccess()">Change</button>
+
+    <div id="toast-container"></div>
+
+    <script>
+        function showSuccess() {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast-success';
+            toast.innerText = 'Password changed successfully';
+            container.appendChild(toast);
+
+            // Redirect to dashboard after a short delay
+            setTimeout(() => {
+                window.location.href = 'dashboard.html';
+            }, 2000);
+        }
+    </script>
+</body>
+
+</html>
