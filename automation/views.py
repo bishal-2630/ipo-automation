@@ -46,18 +46,6 @@ class AccountViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
-    def update(self, request, *args, **kwargs):
-        # DEBUG: Echo back what we received
-        received_boid = request.data.get('boid', 'NOT_PRESENT')
-        print(f"DEBUG: Updating Account {kwargs.get('pk')} with BOID: {received_boid}")
-        
-        response = super().update(request, *args, **kwargs)
-        
-        # Add debug info to response
-        if isinstance(response.data, dict):
-            response.data['debug_received_boid'] = received_boid
-        return response
-
 
 class BankAccountViewSet(viewsets.ModelViewSet):
     serializer_class = BankAccountSerializer
@@ -137,7 +125,7 @@ class HealthView(APIView):
             
         return Response({
             "status": "online",
-            "version": "v3.24-final",
+            "version": "v3.25-stable",
             "encryption_key_length": len(key),
             "encryption_key_valid": key_valid,
             "encryption_error": error_msg,
