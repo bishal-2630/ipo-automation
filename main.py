@@ -1026,7 +1026,7 @@ def run_status_check():
 
             # 2. Get the list of companies
             page.wait_for_selector('ng-select', timeout=15000)
-            page.click('ng-select')
+            page.click('ng-select', force=True)
             page.wait_for_timeout(1000)
             
             companies = page.evaluate("""
