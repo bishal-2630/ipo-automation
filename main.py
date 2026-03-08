@@ -973,27 +973,75 @@ def run_automation():
         print("\nAll accounts processed.")
 
 
-def solve_captcha_official(page, selector, reader):
+def solve_captcha_official(page_or_frame, selector, reader):
     """
     Utility to capture and solve a captcha on a page.
+    Tries multiple specialized image processing strategies to solve noisy captchas.
     """
     try:
-        captcha_img = page.locator(selector).first
+        captcha_img = page_or_frame.locator(selector).first
         if not captcha_img.is_visible(timeout=5000):
             return None
         
-        # Take a high-quality screenshot of the captcha
         img_path = f"temp_captcha_{int(time.time())}.png"
         captcha_img.screenshot(path=img_path)
         
-        results = reader.readtext(img_path)
-        # Clean up the temp file
+        import cv2
+        import numpy as np
+        img = cv2.imread(img_path)
+        if img is None:
+            return None
+            
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Strategies to try on the current captcha image
+        def try_ocr(processed_img, label):
+            cv2.imwrite(img_path, processed_img)
+            results = reader.readtext(img_path, allowlist='0123456789')
+            if results:
+                res = ''.join([text for _, text, _ in results if text])
+                res = ''.join([c for c in res if c.isdigit()])
+                if len(res) >= 4:
+                    return res
+            return None
+
+        # 1. Standard Denoise + Threshold
+        smooth = cv2.bilateralFilter(gray, 9, 75, 75)
+        up3x = cv2.resize(smooth, None, fx=3, fy=3, interpolation=cv2.INTER_LINEAR)
+        
+        for th in [120, 150, 180]:
+            _, thresh = cv2.threshold(up3x, th, 255, cv2.THRESH_BINARY)
+            res = try_ocr(thresh, f"Thresh-{th}")
+            if res: 
+                if os.path.exists(img_path): os.remove(img_path)
+                return res
+
+        # 2. Median Blur (Effective for grids)
+        median = cv2.medianBlur(up3x, 5)
+        _, thresh_m = cv2.threshold(median, 150, 255, cv2.THRESH_BINARY)
+        res = try_ocr(thresh_m, "Median")
+        if res:
+            if os.path.exists(img_path): os.remove(img_path)
+            return res
+
+        # 3. Sharpening
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(up3x, -1, kernel)
+        res = try_ocr(sharpened, "Sharpened")
+        if res:
+            if os.path.exists(img_path): os.remove(img_path)
+            return res
+
+        # 4. Adaptive Thresholding
+        adaptive = cv2.adaptiveThreshold(median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        res = try_ocr(adaptive, "Adaptive")
+        if res:
+            if os.path.exists(img_path): os.remove(img_path)
+            return res
+
         if os.path.exists(img_path):
             os.remove(img_path)
-            
-        res = ''.join([text for _, text, _ in results])
-        res = re.sub(r'[^a-zA-Z0-9]', '', res)
-        return res
+        return None
     except Exception as e:
         print(f"Error solving captcha: {e}")
         return None
@@ -1031,30 +1079,43 @@ def run_status_check():
             print("Navigating to https://iporesult.cdsc.com.np/...")
             page.goto('https://iporesult.cdsc.com.np/', timeout=60000, wait_until='networkidle')
             
-            # 1. Solve initial Bot Protection if it exists
-            # The F5 WAF puts the captcha inside an iframe
+            # Simple Bot Protection check (less aggressive)
             bot_frame = None
             for f in page.frames:
-                try:
-                    if 'prevent automated spam submission' in f.content():
-                        bot_frame = f
-                        break
-                except Exception:
-                    pass
-
+                if "challenge" in f.url or "captcha" in f.url:
+                    bot_frame = f
+                    break
+            
             if bot_frame:
-                print("Bot protection detected in iframe. Solving...")
+                print("Potential bot protection frame detected by URL. Attempting solve...")
                 bot_captcha = solve_captcha_official(bot_frame, 'img', reader)
                 if bot_captcha:
-                    bot_frame.locator('input[type="text"], input[name="answer"]').first.fill(bot_captcha)
+                    bot_frame.locator('input[type="text"]').first.fill(bot_captcha)
                     bot_frame.locator('input[type="submit"], button').first.click()
                     page.wait_for_timeout(3000)
 
             # 2. Get the list of companies
-            page.wait_for_selector('ng-select', timeout=15000)
-            page.click('ng-select', force=True)
-            page.wait_for_timeout(1000)
-            
+            try:
+                page.wait_for_selector('ng-select', timeout=20000)
+                page.click('ng-select', force=True)
+                page.wait_for_timeout(2000)
+            except Exception as e:
+                print(f"Error: CDSC landing page not loaded correctly: {e}")
+                page.screenshot(path="cdsc_landing_error.png")
+                browser.close()
+                return
+
+            # 2. Get the list of companies
+            try:
+                page.wait_for_selector('ng-select', timeout=20000)
+                page.click('ng-select', force=True)
+                page.wait_for_timeout(2000)
+            except Exception as e:
+                print(f"Error: CDSC landing page not loaded correctly: {e}")
+                page.screenshot(path="cdsc_landing_error.png")
+                browser.close()
+                return
+
             companies = page.evaluate("""
                 () => {
                     const items = Array.from(document.querySelectorAll('.ng-option'));
@@ -1064,6 +1125,7 @@ def run_status_check():
             
             if not companies:
                 print("No companies found in the list.")
+                page.screenshot(path="no_companies_found.png")
                 browser.close()
                 return
 
@@ -1098,42 +1160,90 @@ def run_status_check():
                     # Fill BOID
                     page.fill('input[name="boid"]', boid)
                     
-                    # Solve Captcha
-                    captcha_val = solve_captcha_official(page, 'img[id*="captcha"], .captcha-image img', reader)
+                    # Solve Captcha with Retry Loop
+                    captcha_val = None
+                    for attempt in range(10):
+                        # Proactively remove F5 challenge iframes that intercept events
+                        page.evaluate("""() => {
+                            const iframes = document.querySelectorAll('iframe');
+                            iframes.forEach(iframe => {
+                                if (iframe.id && iframe.id.includes('TSBrPFrame')) {
+                                    iframe.remove();
+                                }
+                            });
+                        }""")
+
+                        captcha_val = solve_captcha_official(page, 'img[alt="captcha"]', reader)
+                        if captcha_val and len(captcha_val) == 5:
+                            print(f"[{username}] Successfully solved captcha potentially: {captcha_val}")
+                            page.fill('input[name="userCaptcha"]', captcha_val)
+                            
+                            # Click Submit
+                            page.click('button[type="submit"]', force=True)
+                            page.wait_for_timeout(3000)
+                            
+                            # Check if invalid captcha message appeared
+                            invalid_msg = page.locator('.text-danger b').first
+                            if invalid_msg.is_visible() and "invalid captcha" in invalid_msg.inner_text().lower():
+                                print(f"[{username}] Invalid captcha ({captcha_val}). Refreshing and retrying...")
+                                # Click Reload Button
+                                reload_btn = page.locator('button[tooltip*="Reload"], button:has(.bi-arrow-counterclockwise)').first
+                                if reload_btn.is_visible():
+                                    reload_btn.click(force=True)
+                                    page.wait_for_timeout(2000)
+                                    continue
+                                else:
+                                    break
+                            else:
+                                # Captcha was accepted (or some other result)
+                                break
+                        else:
+                            print(f"[{username}] Captcha solve failed or too short ({captcha_val}). Refreshing...")
+                            # Click Reload Button
+                            reload_btn = page.locator('button[tooltip*="Reload"], button:has(.bi-arrow-counterclockwise)').first
+                            if reload_btn.is_visible():
+                                reload_btn.click(force=True)
+                                page.wait_for_timeout(2000)
+                            else:
+                                break
+
                     if not captcha_val:
-                        print(f"[{username}] Failed to solve captcha. Skipping.")
+                        print(f"[{username}] Failed to solve captcha after 10 attempts. Skipping.")
                         continue
                     
-                    page.fill('input[id*="captcha"], input[placeholder*="Captcha"]', captcha_val)
+                    page.fill('input[name="userCaptcha"], input[id*="captcha"], input[placeholder*="Captcha"]', captcha_val)
                     
                     # Submit
-                    page.click('button[type="submit"], .btn-primary')
+                    page.click('button[type="submit"], button:has-text("View Result")', force=True)
                     page.wait_for_timeout(2000)
 
                     # Check Response
-                    result_msg = page.locator('#result, .alert, .feedback').first
-                    if result_msg.is_visible():
-                        feedback = result_msg.inner_text().strip()
+                    try:
+                        # CDSC uses .text-success for Allotted and .text-danger for Not Allotted
+                        page.wait_for_selector('.text-success b, .text-danger b', timeout=8000)
+                        result_msg_loc = page.locator('.text-success b, .text-danger b').first
+                        feedback = result_msg_loc.inner_text().strip()
                         print(f"[{username}] Result: {feedback}")
                         
+                        # Screenshot for proof
+                        page.screenshot(path=f"result_check_{username}.png")
+                        
                         # Notification logic
-                        if "Congratulations" in feedback or "Allotted" in feedback:
+                        if "congratulations" in feedback.lower() or "allotted" in feedback.lower() and "not allotted" not in feedback.lower():
                             # Parse quantity if possible (e.g., "Allotted: 10")
                             qty_match = re.search(r'(\d+)', feedback)
-                            qty = qty_match.group(1) if qty_match else "Unknown"
+                            qty = qty_match.group(1) if qty_match else "10"
                             msg = f"🎉 ALLOTTED! You have been allotted {qty} shares of {company}."
                             subj = f"[MeroShare] Result: ALLOTTED!"
                             send_email_notification(account.get('EMAIL'), subj, msg)
                             send_push_notification(account.get('TOKENS'), subj, msg)
-                        elif "Not Allotted" in feedback or "Sorry" in feedback:
-                            # Only notify if it's a final rejection and not already notified?
-                            # For simplicity, we'll notify once per run if not allotted.
+                        elif "not allotted" in feedback.lower() or "sorry" in feedback.lower():
                             msg = f"ℹ️ Result for {company}: Not Allotted."
                             subj = f"[MeroShare] Result: Not Allotted"
-                            # send_email_notification(account.get('EMAIL'), subj, msg)
                             send_push_notification(account.get('TOKENS'), subj, msg)
-                    else:
-                        print(f"[{username}] No feedback visible. Captcha might have been wrong.")
+                    except Exception as e:
+                        print(f"[{username}] Error checking result or wrong captcha: {e}")
+                        page.screenshot(path=f"result_error_{username}.png")
                         
                     # Clear for next account? Usually the page resets or we just overwrite.
                     page.locator('input[name="boid"]').clear()
