@@ -18,9 +18,15 @@ import re
 import datetime
 import psycopg2
 import warnings
+import cv2
+import numpy as np
+import easyocr
 
 # Suppress noisy warnings (like torch dataloader)
 warnings.filterwarnings("ignore", category=UserWarning)
+
+# Initialize EasyOCR once at module level to avoid redundant downloads/loading
+READER = easyocr.Reader(['en'], gpu=False, verbose=False)
 
 # Load environment variables
 load_dotenv()
@@ -977,7 +983,7 @@ def run_automation():
         print("\nAll accounts processed.")
 
 
-def solve_captcha_official(page_or_frame, selector, reader):
+def solve_captcha_official(page_or_frame, selector):
     """
     Utility to capture and solve a captcha on a page.
     Tries multiple specialized image processing strategies to solve noisy captchas.
@@ -990,8 +996,6 @@ def solve_captcha_official(page_or_frame, selector, reader):
         img_path = f"temp_captcha_{int(time.time())}.png"
         captcha_img.screenshot(path=img_path)
         
-        import cv2
-        import numpy as np
         img = cv2.imread(img_path)
         if img is None:
             return None
@@ -1001,20 +1005,26 @@ def solve_captcha_official(page_or_frame, selector, reader):
         # Strategies to try on the current captcha image
         def try_ocr(processed_img, label):
             cv2.imwrite(img_path, processed_img)
-            results = reader.readtext(img_path, allowlist='0123456789')
+            # Use the global READER
+            results = READER.readtext(img_path, allowlist='0123456789')
             if results:
                 res = ''.join([text for _, text, _ in results if text])
                 res = ''.join([c for c in res if c.isdigit()])
-                if len(res) >= 4:
+                if len(res) == 5:
+                    print(f"   [Strategy: {label}] Solved: {res}")
                     return res
+                elif len(res) >= 4:
+                    # Might be missing one digit, but let's log it
+                    pass
             return None
 
-        # 1. Standard Denoise + Threshold
-        smooth = cv2.bilateralFilter(gray, 9, 75, 75)
-        up4x = cv2.resize(smooth, None, fx=4, fy=4, interpolation=cv2.INTER_LANCZOS4)
+        # Upscale 4x with Lanczos for better edge preservation
+        up4x = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_LANCZOS4)
         
+        # 1. Standard Denoise + Multiple Thresholds
+        smooth = cv2.bilateralFilter(up4x, 9, 75, 75)
         for th in [120, 150, 180]:
-            _, thresh = cv2.threshold(up4x, th, 255, cv2.THRESH_BINARY)
+            _, thresh = cv2.threshold(smooth, th, 255, cv2.THRESH_BINARY)
             res = try_ocr(thresh, f"Thresh-{th}")
             if res: 
                 if os.path.exists(img_path): os.remove(img_path)
@@ -1023,7 +1033,7 @@ def solve_captcha_official(page_or_frame, selector, reader):
         # 2. Median Blur (Effective for grids)
         median = cv2.medianBlur(up4x, 5)
         _, thresh_m = cv2.threshold(median, 150, 255, cv2.THRESH_BINARY)
-        res = try_ocr(thresh_m, "Median")
+        res = try_ocr(thresh_m, "Median-5")
         if res:
             if os.path.exists(img_path): os.remove(img_path)
             return res
@@ -1044,10 +1054,28 @@ def solve_captcha_official(page_or_frame, selector, reader):
             return res
 
         # 5. Morphological Opening (Grid Cleaning)
-        # Using a slightly larger kernel to eat the grid lines
         kernel_clean = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         opened = cv2.morphologyEx(thresh_m, cv2.MORPH_OPEN, kernel_clean)
         res = try_ocr(opened, "MorphOpened")
+        if res:
+            if os.path.exists(img_path): os.remove(img_path)
+            return res
+
+        # 6. Advanced Grid Subtraction
+        # threshold INV to get grid + text as white
+        _, binary_inv = cv2.threshold(up4x, 150, 255, cv2.THRESH_BINARY_INV)
+        # detect vertical lines
+        v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
+        v_lines = cv2.morphologyEx(binary_inv, cv2.MORPH_OPEN, v_kernel, iterations=2)
+        # detect horizontal lines
+        h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+        h_lines = cv2.morphologyEx(binary_inv, cv2.MORPH_OPEN, h_kernel, iterations=2)
+        # subtract grid from text
+        grid = cv2.add(v_lines, h_lines)
+        subtracted = cv2.subtract(binary_inv, grid)
+        # invert back and solve
+        clean_final = cv2.bitwise_not(subtracted)
+        res = try_ocr(clean_final, "GridSubtraction")
         if res:
             if os.path.exists(img_path): os.remove(img_path)
             return res
@@ -1070,9 +1098,6 @@ def run_status_check():
         return
 
     print(f"🔍 Official Status Check: Processing {len(accounts)} account(s)...")
-    
-    import easyocr
-    reader = easyocr.Reader(['en'], gpu=False, verbose=False)
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
@@ -1101,7 +1126,7 @@ def run_status_check():
             
             if bot_frame:
                 print("Potential bot protection frame detected by URL. Attempting solve...")
-                bot_captcha = solve_captcha_official(bot_frame, 'img', reader)
+                bot_captcha = solve_captcha_official(bot_frame, 'img')
                 if bot_captcha:
                     bot_frame.locator('input[type="text"]').first.fill(bot_captcha)
                     bot_frame.locator('input[type="submit"], button').first.click()
@@ -1187,7 +1212,7 @@ def run_status_check():
                             });
                         }""")
 
-                        captcha_val = solve_captcha_official(page, 'img[alt="captcha"]', reader)
+                        captcha_val = solve_captcha_official(page, 'img[alt="captcha"]')
                         if captcha_val and len(captcha_val) == 5:
                             print(f"[{username}] Successfully solved captcha potentially: {captcha_val}")
                             page.fill('input[name="userCaptcha"]', captcha_val)
