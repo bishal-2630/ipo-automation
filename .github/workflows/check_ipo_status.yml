@@ -2,7 +2,7 @@ name: Daily IPO Status Check (Official)
 
 on:
   schedule:
-    - cron: '15 6 * * *'  # 12:00 PM NPT (06:15 UTC)
+    - cron: '30 11 * * *'  # 5:15 PM NPT (11:30 UTC)
   workflow_dispatch:      # Allow manual triggering
 
 jobs:
