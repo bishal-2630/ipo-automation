@@ -137,7 +137,7 @@ class HealthView(APIView):
             
         return Response({
             "status": "online",
-            "version": "v3.22-light",
+            "version": "v3.23-final",
             "encryption_key_length": len(key),
             "encryption_key_valid": key_valid,
             "encryption_error": error_msg,
@@ -149,7 +149,7 @@ def home_view(request):
     return HttpResponse("""
         <div style='background: #1a1a1a; color: #00ff00; padding: 20px; font-family: monospace;'>
             <h1>🚀 IPO AUTOMATION BACKEND</h1>
-            <p style='color: #ff00ff; font-size: 20px;'>VERSION: v3.13 (Mar 03 - 03:15)</p>
+            <p style='color: #ff00ff; font-size: 20px;'>VERSION: v3.23-final (DEPLOYED)</p>
             <p>Branch: user-part-1</p>
             <p>Access the API at <a href='/api/' style='color: #00ffff;'>/api/</a>.</p>
         </div>
