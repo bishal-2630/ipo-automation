@@ -14,6 +14,8 @@ from expiry_handler import (
     check_account_expiry_warning,
     handle_expired_account,
 )
+import easyocr
+import re
 
 # Load environment variables
 load_dotenv()
@@ -589,7 +591,7 @@ def get_accounts():
             # Fetch accounts and join with auth_user to get the email
             # Also join with automation_bankaccount for balance checking
             cur.execute("""
-                SELECT a.id, a.meroshare_user, a.meroshare_pass, a.dp_name, a.crn, a.tpin, a.bank_name, a.kitta, u.email, a.owner_id,
+                SELECT a.id, a.meroshare_user, a.meroshare_pass, a.boid, a.dp_name, a.crn, a.tpin, a.bank_name, a.kitta, u.email, a.owner_id,
                        b.bank as bank_code, b.phone_number, b.bank_password
                 FROM automation_account a
                 LEFT JOIN auth_user u ON a.owner_id = u.id
@@ -618,6 +620,7 @@ def get_accounts():
                     "KITTA": str(row['kitta']),
                     "EMAIL": row.get('email'),
                     "TOKENS": tokens,
+                    "BOID": row.get('boid'),
                     "BANK_CODE": row.get('bank_code'),
                     "BANK_PHONE": row.get('phone_number'),
                     "BANK_PASS": decrypt_val(row.get('bank_password'))
@@ -652,6 +655,7 @@ def get_accounts():
         accounts = [{
             "MEROSHARE_USER": os.getenv("MEROSHARE_USER"),
             "MEROSHARE_PASS": os.getenv("MEROSHARE_PASS"),
+            "BOID": os.getenv("BOID"),
             "DP_NAME": os.getenv("DP_NAME"),
             "CRN": os.getenv("CRN"),
             "TPIN": os.getenv("TPIN"),
@@ -960,60 +964,160 @@ def run_automation():
         print("\nAll accounts processed.")
 
 
+def solve_captcha_official(page, selector, reader):
+    """
+    Utility to capture and solve a captcha on a page.
+    """
+    try:
+        captcha_img = page.locator(selector).first
+        if not captcha_img.is_visible(timeout=5000):
+            return None
+        
+        # Take a high-quality screenshot of the captcha
+        img_path = f"temp_captcha_{int(time.time())}.png"
+        captcha_img.screenshot(path=img_path)
+        
+        results = reader.readtext(img_path)
+        # Clean up the temp file
+        if os.path.exists(img_path):
+            os.remove(img_path)
+            
+        res = ''.join([text for _, text, _ in results])
+        res = re.sub(r'[^a-zA-Z0-9]', '', res)
+        return res
+    except Exception as e:
+        print(f"Error solving captcha: {e}")
+        return None
+
 def run_status_check():
     """
-    Watchdog: Logs in to each account and checks Application Report.
-    Only sends notification when a FINAL status is found.
-    Runs silently if still in process (bank/holiday delay).
+    Official Result Check: Navigates to iporesult.cdsc.com.np
+    Checks for each account's BOID against available companies.
     """
     accounts = get_accounts()
     if not accounts:
         print("Error: No accounts found.")
         return
 
-    count = len(accounts)
-    print(f"🔍 Status Watchdog: Checking {count} account(s)...")
+    print(f"🔍 Official Status Check: Processing {len(accounts)} account(s)...")
+    
+    reader = easyocr.Reader(['en'], gpu=False)
 
     with sync_playwright() as p:
         headless = os.getenv("HEADLESS", "true").lower() == "true"
         browser = p.chromium.launch(headless=headless)
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        page = context.new_page()
 
-        for i, account in enumerate(accounts):
-            username = account.get('MEROSHARE_USER')
-            print(f"\n=============================================")
-            print(f"Status Check {i+1}/{count}: {username}")
-            print(f"=============================================")
+        try:
+            print("Navigating to https://iporesult.cdsc.com.np/...")
+            page.goto('https://iporesult.cdsc.com.np/', timeout=60000, wait_until='networkidle')
+            
+            # 1. Solve initial Bot Protection if it exists
+            if 'prevent automated spam submission' in page.content():
+                print("Bot protection detected. Solving...")
+                bot_captcha = solve_captcha_official(page, 'img', reader)
+                if bot_captcha:
+                    page.locator('input[type="text"]').first.fill(bot_captcha)
+                    page.locator('input[type="submit"], button').first.click()
+                    page.wait_for_timeout(3000)
 
-            page = browser.new_page()
-            try:
-                page.goto("https://meroshare.cdsc.com.np", timeout=60000)
-                MAX_RETRIES = 3
-                logged_in = False
-                for attempt in range(1, MAX_RETRIES + 1):
-                    login_result = login(page, username, account['MEROSHARE_PASS'], account['DP_NAME'])
-                    if login_result is True:
-                        logged_in = True
-                        break
-                    elif login_result in ("EXPIRED", "DEMAT_EXPIRED", "MEROSHARE_EXPIRED"):
-                        print(f"[{username}] Login blocked ({login_result}). Skipping check in status mode.")
-                        break
+            # 2. Get the list of companies
+            page.wait_for_selector('ng-select', timeout=15000)
+            page.click('ng-select')
+            page.wait_for_timeout(1000)
+            
+            companies = page.evaluate("""
+                () => {
+                    const items = Array.from(document.querySelectorAll('.ng-option'));
+                    return items.map(el => el.innerText.trim()).filter(t => t !== '');
+                }
+            """)
+            
+            if not companies:
+                print("No companies found in the list.")
+                browser.close()
+                return
+
+            print(f"Found {len(companies)} companies. Checking for latest results...")
+            
+            # We usually only want to check the top 2-3 latest companies to save time
+            # or all of them if the user prefers. Let's check the first 2.
+            target_companies = companies[:2] 
+
+            for company in target_companies:
+                print(f"\n--- Checking Result for: {company} ---")
+                
+                # Select the company
+                page.click('ng-select')
+                page.wait_for_timeout(500)
+                page.type('input[type="text"]', company)
+                page.keyboard.press('Enter')
+                page.wait_for_timeout(500)
+
+                for account in accounts:
+                    username = account.get('MEROSHARE_USER')
+                    boid = account.get('BOID')
+                    
+                    if not boid:
+                        # Try to extract BOID from MeroShare if missing? 
+                        # For now, we assume it's in the DB.
+                        print(f"[{username}] Skipping: No BOID provided.")
+                        continue
+
+                    print(f"[{username}] Checking BOID: {boid}...")
+                    
+                    # Fill BOID
+                    page.fill('input[name="boid"]', boid)
+                    
+                    # Solve Captcha
+                    captcha_val = solve_captcha_official(page, 'img[id*="captcha"], .captcha-image img', reader)
+                    if not captcha_val:
+                        print(f"[{username}] Failed to solve captcha. Skipping.")
+                        continue
+                    
+                    page.fill('input[id*="captcha"], input[placeholder*="Captcha"]', captcha_val)
+                    
+                    # Submit
+                    page.click('button[type="submit"], .btn-primary')
+                    page.wait_for_timeout(2000)
+
+                    # Check Response
+                    result_msg = page.locator('#result, .alert, .feedback').first
+                    if result_msg.is_visible():
+                        feedback = result_msg.inner_text().strip()
+                        print(f"[{username}] Result: {feedback}")
+                        
+                        # Notification logic
+                        if "Congratulations" in feedback or "Allotted" in feedback:
+                            # Parse quantity if possible (e.g., "Allotted: 10")
+                            qty_match = re.search(r'(\d+)', feedback)
+                            qty = qty_match.group(1) if qty_match else "Unknown"
+                            msg = f"🎉 ALLOTTED! You have been allotted {qty} shares of {company}."
+                            subj = f"[MeroShare] Result: ALLOTTED!"
+                            send_email_notification(account.get('EMAIL'), subj, msg)
+                            send_push_notification(account.get('TOKENS'), subj, msg)
+                        elif "Not Allotted" in feedback or "Sorry" in feedback:
+                            # Only notify if it's a final rejection and not already notified?
+                            # For simplicity, we'll notify once per run if not allotted.
+                            msg = f"ℹ️ Result for {company}: Not Allotted."
+                            subj = f"[MeroShare] Result: Not Allotted"
+                            # send_email_notification(account.get('EMAIL'), subj, msg)
+                            # send_push_notification(account.get('TOKENS'), subj, msg)
                     else:
-                        page.reload()
-                        page.wait_for_load_state('networkidle')
-                        time.sleep(2)
+                        print(f"[{username}] No feedback visible. Captcha might have been wrong.")
+                        
+                    # Clear for next account? Usually the page resets or we just overwrite.
+                    page.locator('input[name="boid"]').clear()
+                    page.locator('input[id*="captcha"], input[placeholder*="Captcha"]').clear()
 
-                if logged_in:
-                    check_status(page, account)
-                else:
-                    print(f"Error: [{username}] Could not log in for status check (or checks restricted to apply mode).")
-
-            except Exception as e:
-                print(f"Error: [{username}] {e}")
-            finally:
-                page.close()
-
-        browser.close()
-        print("\nStatus check run complete.")
+        except Exception as e:
+            print(f"Error during status check: {e}")
+            page.screenshot(path="status_check_error.png")
+        finally:
+            browser.close()
+    
+    print("\nOfficial status check run complete.")
 
 
 if __name__ == "__main__":

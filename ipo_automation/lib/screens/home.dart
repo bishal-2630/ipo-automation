@@ -194,6 +194,20 @@ class _HomeScreenState extends State<HomeScreen> {
               SizedBox(height: 4),
               Row(
                 children: [
+                  Icon(Icons.fingerprint, size: 14, color: Colors.grey),
+                  SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      "BOID: ${acc.boid}", 
+                      style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                children: [
                   Icon(Icons.history, size: 14, color: Colors.grey),
                   SizedBox(width: 4),
                   Expanded(

@@ -8,6 +8,7 @@ class Account(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='meroshare_accounts')
     meroshare_user = models.CharField(max_length=100, unique=True)
     meroshare_pass = models.CharField(max_length=500)  # stored encrypted
+    boid = models.CharField(max_length=20, blank=True, null=True, help_text="16-digit BOID for checking IPO results")
     dp_name = models.CharField(max_length=255)
     crn = models.CharField(max_length=20)
     tpin = models.CharField(max_length=10)
