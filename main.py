@@ -15,6 +15,8 @@ from expiry_handler import (
     handle_expired_account,
 )
 import re
+import datetime
+import psycopg2
 
 # Load environment variables
 load_dotenv()
@@ -1103,13 +1105,31 @@ def run_status_check():
                             msg = f"ℹ️ Result for {company}: Not Allotted."
                             subj = f"[MeroShare] Result: Not Allotted"
                             # send_email_notification(account.get('EMAIL'), subj, msg)
-                            # send_push_notification(account.get('TOKENS'), subj, msg)
+                            send_push_notification(account.get('TOKENS'), subj, msg)
                     else:
                         print(f"[{username}] No feedback visible. Captcha might have been wrong.")
                         
                     # Clear for next account? Usually the page resets or we just overwrite.
                     page.locator('input[name="boid"]').clear()
                     page.locator('input[id*="captcha"], input[placeholder*="Captcha"]').clear()
+
+                    # Save to Database Log
+                    if os.getenv("DATABASE_URL"):
+                        try:
+                            conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+                            cur = conn.cursor()
+                            status_val = "Allotted" if ("Congratulations" in feedback or "Allotted" in feedback) else "Not Allotted"
+                            cur.execute("""
+                                INSERT INTO automation_applicationlog
+                                    (account_id, company_name, status, remark, timestamp, is_read)
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                            """, (account.get('ID'), company, status_val, feedback,
+                                  datetime.datetime.now(datetime.timezone.utc), False))
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                        except Exception as db_err:
+                            print(f"Warning: Failed to save status log for {username}: {db_err}")
 
         except Exception as e:
             print(f"Error during status check: {e}")
