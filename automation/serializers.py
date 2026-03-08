@@ -29,10 +29,16 @@ class AccountSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         plain = validated_data.pop('meroshare_pass', None)
+        boid_val = validated_data.pop('boid', None)
+        
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+            
         if plain:
             instance.set_meroshare_pass(plain)
+        if boid_val is not None:
+            instance.boid = boid_val
+            
         instance.save()
         return instance
 
