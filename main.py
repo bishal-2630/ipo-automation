@@ -67,6 +67,44 @@ def update_local_account_password(username, new_password):
         print(f"Warning: Failed to update local accounts.json: {e}")
     return False
 
+def update_remote_account_password(username, new_password):
+    """
+    Updates the password for a specific user in the remote database.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        return False
+
+    try:
+        from cryptography.fernet import Fernet
+        import psycopg2
+
+        encryption_key = os.getenv("ENCRYPTION_KEY")
+        if not encryption_key:
+            print(f"Warning: ENCRYPTION_KEY missing. Cannot update DB for {username}")
+            return False
+
+        cipher = Fernet(encryption_key.encode())
+        encrypted_pass = cipher.encrypt(new_password.encode()).decode()
+
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE automation_account SET meroshare_pass = %s WHERE meroshare_user = %s",
+            (encrypted_pass, username)
+        )
+        conn.commit()
+        updated = cur.rowcount > 0
+        cur.close()
+        conn.close()
+
+        if updated:
+            print(f"Successfully updated remote database password for {username}")
+            return True
+    except Exception as e:
+        print(f"Warning: Failed to update remote database for {username}: {e}")
+    return False
+
 def handle_password_reset(page, account):
     """
     Handles the password change process when an expiry is detected.
@@ -95,13 +133,14 @@ def handle_password_reset(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User
-                msg = f"Your MeroShare password has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
+                msg = f"Your MeroShare password has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets if the automatic update failed."
                 subj = f"[MeroShare] Password Reset Successful"
                 send_email_notification(account.get('EMAIL'), subj, msg)
                 send_push_notification(account.get('TOKENS'), username, msg)
                 
-                # Update local file
+                # Update records
                 update_local_account_password(username, new_password)
+                update_remote_account_password(username, new_password)
                 return True
             else:
                 print(f"[{username}] Password reset reported failure: {toast_text}")
@@ -114,7 +153,10 @@ def handle_password_reset(page, account):
                  subj = f"[MeroShare] Password Reset Successful"
                  send_email_notification(account.get('EMAIL'), subj, msg)
                  send_push_notification(account.get('TOKENS'), username, msg)
+                 
+                 # Update records
                  update_local_account_password(username, new_password)
+                 update_remote_account_password(username, new_password)
                  return True
                  
     except Exception as e:

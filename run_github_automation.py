@@ -2,7 +2,7 @@ import os
 import psycopg2
 import datetime
 from playwright.sync_api import sync_playwright
-from main import login, apply_ipo
+from main import login, apply_ipo, handle_password_reset
 from bank_checkers.bank import check_balance
 
 # ── Firebase setup ──────────────────────────────────────────────────
@@ -193,6 +193,22 @@ def run_automation():
                         else:
                             status = "Failed"
                             remark = result_detail
+                    elif login_result == "EXPIRED":
+                        print(f"  ⚠️  Password Expired. Attempting automatic reset...")
+                        if handle_password_reset(page, account_data):
+                            print(f"  ✅ Password successfully reset and logged in.")
+                            success, result_detail = apply_ipo(page, account_data)
+                            if success:
+                                status = "Success"
+                                ipo_name = result_detail
+                                remark = f"{ipo_name} (after password reset) ipo has been applied successfully."
+                            else:
+                                status = "Failed"
+                                remark = result_detail
+                        else:
+                            print(f"  ❌ Password reset failed.")
+                            status = "Failed"
+                            remark = "Password expired and automatic reset failed."
                     else:
                         print(f"  ❌ Login failed: {login_result}")
                         status = "Failed"
