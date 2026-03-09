@@ -334,13 +334,13 @@ def fill_and_submit_form(page, account, company_name=None):
             else:
                 error_msg = toast_text
                 if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
+                    subj = username
                     msg = f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
-                    subj = f"[MeroShare] Failed: Insufficient Balance"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
                     send_push_notification(account.get('TOKENS'), subj, msg)
                 else:
-                    msg = f"❌ FAILED: {error_msg} - {username}"
-                    subj = f"[MeroShare] Error: Application Failed"
+                    subj = username
+                    msg = f"❌ FAILED: {error_msg}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
                     send_push_notification(account.get('TOKENS'), subj, msg)
                 return False, error_msg
@@ -863,10 +863,11 @@ def check_status(page, account):
                             # No notification sent when reapply enabled but button missing (silent end)
                     else:
                         print(f"[{username}] Auto-reapply disabled. Sending rejection notification.")
-                        subj = f"[MeroShare] Status: Rejected"
-                        body = f"Hi {username},\n\n{msg}\n\nTo reapply, please topup and the automation will retry in the next scheduled run."
-                        send_email_notification(account.get('EMAIL'), subj, body)
-                        send_push_notification(account.get('TOKENS'), subj, msg)
+                        subj = username
+                        msg_body = f"Your IPO ({target_ipo}) was rejected. REMARK: {remark_val}."
+                        body_email = f"Hi {username},\n\n{msg_body}\n\nTo reapply, please topup and the automation will retry in the next scheduled run."
+                        send_email_notification(account.get('EMAIL'), subj, body_email)
+                        send_push_notification(account.get('TOKENS'), subj, msg_body)
                 else:
                     print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
 
@@ -930,8 +931,8 @@ def run_automation():
 
                     if balance is not None and balance < MIN_BALANCE:
                         print(f"[{username}] ⚠️ Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
-                        subj = "⚠️ Low Bank Balance!"
-                        msg = f"{username}: Rs.{balance:.2f} balance. Please top up to apply for IPO."
+                        subj = username
+                        msg = f"⚠️ Low Bank Balance! Rs.{balance:.2f} balance. Please top up to apply for IPO."
                         send_email_notification(account.get('EMAIL'), subj, msg)
                         send_push_notification(account.get('TOKENS'), subj, msg)
                         continue
@@ -1084,12 +1085,12 @@ def run_status_check():
                     
                     # Notification logic
                     if "Not Allotted" in feedback:
-                        msg = f"{company_name} has not been alloted."
-                        subj = f"[IPO Result] Not Allotted"
+                        subj = account.get('MEROSHARE_USER', 'Unknown')
+                        msg = f"{company_name} is not alloted."
                         send_push_notification(account.get('TOKENS'), subj, msg)
                     elif "Allotted" in feedback:
-                        msg = f"🎉 ALLOTTED! You have been allotted {feedback.split(':')[-1].strip() if ':' in feedback else 'some'} shares of {company_name}."
-                        subj = f"[IPO Result] ALLOTTED!"
+                        subj = account.get('MEROSHARE_USER', 'Unknown')
+                        msg = f"Congratulations!! {company_name} has been alloted for this account."
                         send_push_notification(account.get('TOKENS'), subj, msg)
 
                     # Reset modal/state if needed (Escape usually works for modals)
