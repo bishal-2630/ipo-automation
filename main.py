@@ -132,31 +132,37 @@ def handle_password_reset(page, account):
             print(f"[{username}] Reset Result: {toast_text}")
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
-                # Notify User
+                # Notify User (FCM Only as per preference)
                 msg = f"Your MeroShare password has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets if the automatic update failed."
-                subj = f"[MeroShare] Password Reset Successful"
-                send_email_notification(account.get('EMAIL'), subj, msg)
                 send_push_notification(account.get('TOKENS'), username, msg)
                 
                 # Update records
                 update_local_account_password(username, new_password)
                 update_remote_account_password(username, new_password)
+
+                # Ensure we navigate to dashboard before returning
+                print(f"[{username}] Reset successful. Navigating to dashboard...")
+                page.goto("https://meroshare.cdsc.com.np/#/dashboard")
+                page.wait_for_load_state('networkidle')
                 return True
             else:
                 print(f"[{username}] Password reset reported failure: {toast_text}")
         except:
              # Fallback check: if we are no longer on change-password page and see dashboard
              page.wait_for_timeout(3000)
-             if "change-password" not in page.url and (page.locator("text=My ASBA").is_visible() or "dashboard" in page.url):
+             if "change-password" not in page.url and (page.locator("text=My ASBA").first.is_visible() or "dashboard" in page.url):
                  print(f"[{username}] Password reset appears successful (redirected).")
+                 # Notify User (FCM Only as per preference)
                  msg = f"Your MeroShare password for {username} has been automatically reset.\n\nNew Password: {new_password}"
-                 subj = f"[MeroShare] Password Reset Successful"
-                 send_email_notification(account.get('EMAIL'), subj, msg)
                  send_push_notification(account.get('TOKENS'), username, msg)
                  
                  # Update records
                  update_local_account_password(username, new_password)
                  update_remote_account_password(username, new_password)
+
+                 # Ensure we navigate to dashboard before returning
+                 page.goto("https://meroshare.cdsc.com.np/#/dashboard")
+                 page.wait_for_load_state('networkidle')
                  return True
                  
     except Exception as e:
