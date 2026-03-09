@@ -74,11 +74,22 @@ class ApiService {
 
   Future<List<dynamic>> getLogs() async {
     final token = await getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/logs/'),
-      headers: {'Authorization': 'Token $token'},
-    );
-    return json.decode(response.body);
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/logs/'),
+        headers: {'Authorization': 'Token $token'},
+      );
+      print('DEBUG: Response Status: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        print('Failed to fetch logs: ${response.body}');
+        throw Exception('Failed to fetch logs (${response.statusCode})');
+      }
+    } catch (e) {
+      print('Failed to fetch logs: $e');
+      rethrow;
+    }
   }
 
   Future<void> addAccount(Map<String, dynamic> accountData) async {
