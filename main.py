@@ -514,7 +514,7 @@ def login(page, username, password, dp_name):
         page.wait_for_timeout(2000) 
         
         # Check for Password Expiry Redirect
-        if "change-password" in page.url or "changepassword" in page.url or page.locator("text=Change Password").is_visible():
+        if "change-password" in page.url or "changepassword" in page.url or page.locator("text=Change Password").first.is_visible():
             print(f"[{username}] ⚠️ Password Expired / Change required detected.")
             return "EXPIRED"
 
