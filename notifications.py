@@ -84,3 +84,30 @@ def send_push_notification(tokens, title, body):
         return response
     except Exception as e:
         print(f"Warning: Failed to send push notification: {e}")
+
+
+def broadcast_push_notification(title, body):
+    """
+    Fetches all unique FCM tokens from the database and sends a broadcast message.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        print("Error: DATABASE_URL not found. Cannot broadcast.")
+        return
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT token FROM automation_fcmtoken")
+        tokens = [t[0] for t in cur.fetchall()]
+        cur.close()
+        conn.close()
+
+        if tokens:
+            print(f"Broadcasting to {len(tokens)} tokens...")
+            return send_push_notification(tokens, title, body)
+        else:
+            print("No tokens found to broadcast.")
+    except Exception as e:
+        print(f"Error in broadcast: {e}")
