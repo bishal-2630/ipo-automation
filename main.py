@@ -1108,6 +1108,27 @@ def run_status_check():
                         print(f"[{username}] Skipping: No BOID provided.")
                         continue
 
+                    # Check if we already have a finalized result for this account + company
+                    if os.getenv("DATABASE_URL"):
+                        try:
+                            conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+                            cur = conn.cursor()
+                            cur.execute("""
+                                SELECT id FROM automation_applicationlog 
+                                WHERE account_id = %s AND company_name = %s 
+                                AND (status = 'Allotted' OR status = 'Not Allotted')
+                                LIMIT 1
+                            """, (account.get('ID'), company_name))
+                            existing = cur.fetchone()
+                            cur.close()
+                            conn.close()
+                            
+                            if existing:
+                                print(f"[{username}] Already notified for {company_name}. Skipping duplicate.")
+                                continue
+                        except Exception as db_err:
+                            print(f"Warning: DB check failed for {username}: {db_err}")
+
                     print(f"[{username}] Checking BOID: {boid}...")
                     
                     # Fill BOID
@@ -1159,7 +1180,8 @@ def run_status_check():
                         try:
                             conn = psycopg2.connect(os.getenv("DATABASE_URL"))
                             cur = conn.cursor()
-                            status_val = "Allotted" if "Allotted" in feedback else "Not Allotted"
+                            # FIXED: "Not Allotted" contains "Allotted", so must check "Not" first
+                            status_val = "Not Allotted" if "Not Allotted" in feedback else "Allotted"
                             cur.execute("""
                                 INSERT INTO automation_applicationlog
                                     (account_id, company_name, status, remark, timestamp, is_read)
