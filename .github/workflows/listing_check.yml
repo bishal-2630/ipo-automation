@@ -2,7 +2,7 @@ name: Secondary Market Listing Check
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Every 2 hours
+    - cron: '45 5 * * *'  # 11:30 AM NPT (05:45 UTC) daily
   workflow_dispatch:        # Allow manual triggering
 
 jobs:
@@ -35,6 +35,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
+          git add notified_listings.txt || true
           git add last_listing_headline.txt || true
           git commit -m "chore: update listing cache [skip ci]" || true
           git push origin user-part-1 || true
