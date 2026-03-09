@@ -247,10 +247,11 @@ def run_automation():
                             if status == "Success":
                                 notif_title = acc['meroshare_user']
                                 notif_body = f"✅ Success: {ipo_name} applied successfully."
-                            else:
+                                send_push_notification(tokens, notif_title, notif_body)
+                            elif remark != "No ordinary shares found":
                                 notif_title = acc['meroshare_user']
                                 notif_body = f"⚠️ {status}: {remark}"
-                            send_push_notification(tokens, notif_title, notif_body)
+                                send_push_notification(tokens, notif_title, notif_body)
                     except Exception as notif_err:
                         print(f"  ⚠️  Notification error for {acc['meroshare_user']}: {notif_err}")
 
