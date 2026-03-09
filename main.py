@@ -816,13 +816,13 @@ def check_status(page, account):
                                 val = label.innerText.split(':')[1].trim();
                             }
                             
-                            # Filter out garbage (dates, times, too short)
+                            // Filter out garbage (dates, times, too short)
                             if (val && (val.toLowerCase().includes('date') || val.toLowerCase().includes('time') || val.length < 3)) return null;
 
                             return val;
                         };
                         
-                        # Prioritize specific status fields
+                        // Prioritize specific status fields
                         const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
                         let statusLine = null;
                         for (const k of statusKeys) {
@@ -830,7 +830,7 @@ def check_status(page, account):
                             if (statusLine) break;
                         }
                         
-                        # Fallback: Check if common status words are present in the body
+                        // Fallback: Check if common status words are present in the body
                         if (!statusLine || statusLine.length < 3) {
                             if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
                             else if (bodyText.includes('rejected')) statusLine = 'rejected';
