@@ -59,11 +59,16 @@ def decrypt(token: str) -> str:
         if token.startswith('gAAAAA'):
             print("  ⚠️  WARNING: ENCRYPTION_KEY is not set, but token looks encrypted! MeroShare login will likely fail.")
         return token
+    
+    # If the token doesn't look encrypted (Fernet tokens start with gAAAAA), return as-is
+    if not token.startswith('gAAAAA'):
+        return token
+
     try:
         return Fernet(_ENCRYPTION_KEY).decrypt(token.encode()).decode()
     except Exception as e:
-        print(f"  ⚠️  WARNING: Decryption failed (Key mismatch?): {e}")
-        return token  # Not encrypted yet, return as-is
+        print(f"  ⚠️  WARNING: Decryption failed for token starting with '{token[:10]}...' (Key mismatch?): {e}")
+        return token
 
 # ── Main automation ─────────────────────────────────────────────────
 

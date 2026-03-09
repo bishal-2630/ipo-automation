@@ -382,8 +382,12 @@ def login(page, username, password, dp_name):
         search_box.first.fill(dp_name, timeout=5000)
         page.wait_for_timeout(1000)
         
-        # 3. Press Enter to confirm (more reliable for Angular than clicking the option)
-        page.keyboard.press("Enter")
+        # 3. Explicitly click the highlighted result (more robust for Angular than just Enter)
+        try:
+            page.locator(".select2-results__option--highlighted, .select2-results__option").first.click(timeout=5000)
+        except:
+            page.keyboard.press("Enter")
+            
         print(f"  DP selected via UI simulation.")
     except Exception as e:
         print(f"  Warning: UI DP selection failed: {e}")
@@ -427,6 +431,9 @@ def login(page, username, password, dp_name):
         page.screenshot(path=f"debug_login_fields_{username}.png")
         return False
 
+    # Small delay to let Angular validation settle
+    page.wait_for_timeout(1500)
+
     # Wait for Login button to become enabled before clicking
     # If Angular fails to enable it after 5s, we force it enabled.
     print(f"Clicking Login button for {username}...")
@@ -436,24 +443,28 @@ def login(page, username, password, dp_name):
             timeout=5000
         )
     except Exception:
-        print(f"[{username}] ⚠️ Login button still disabled after 5s. Forcing it to enable...")
+        print(f"[{username}] ⚠️ Login button still disabled. Forcing aggressive enable...")
         page.evaluate("""
             () => {
-                const buttons = Array.from(document.querySelectorAll('button'));
+                const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
                 const btn = buttons.find(b => 
                     b.type === 'submit' || 
                     b.classList.contains('sign-in') || 
-                    b.textContent.trim().toLowerCase() === 'login'
+                    (b.textContent && b.textContent.trim().toLowerCase() === 'login')
                 );
                 if (btn) {
                     btn.disabled = false;
                     btn.removeAttribute('disabled');
                     btn.classList.remove('disabled');
+                    // Manually trigger Angular's validity if possible
+                    btn.classList.remove('ng-disabled');
+                    btn.style.opacity = '1';
+                    btn.style.pointerEvents = 'auto';
                 }
             }
         """)
         
-    page.click("button:has-text('Login'), button[type='submit'].sign-in", force=True)
+    page.click("button:has-text('Login'), button[type='submit'].sign-in, .sign-in", force=True)
     
     # Wait for navigation/dashboard
     try:
