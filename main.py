@@ -95,10 +95,10 @@ def handle_password_reset(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User
-                msg = f"Your MeroShare password for {username} has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
+                msg = f"Your MeroShare password has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets or local config if the automatic update failed."
                 subj = f"[MeroShare] Password Reset Successful"
                 send_email_notification(account.get('EMAIL'), subj, msg)
-                send_push_notification(account.get('TOKENS'), subj, msg)
+                send_push_notification(account.get('TOKENS'), username, msg)
                 
                 # Update local file
                 update_local_account_password(username, new_password)
@@ -113,7 +113,7 @@ def handle_password_reset(page, account):
                  msg = f"Your MeroShare password for {username} has been automatically reset.\n\nNew Password: {new_password}"
                  subj = f"[MeroShare] Password Reset Successful"
                  send_email_notification(account.get('EMAIL'), subj, msg)
-                 send_push_notification(account.get('TOKENS'), subj, msg)
+                 send_push_notification(account.get('TOKENS'), username, msg)
                  update_local_account_password(username, new_password)
                  return True
                  
@@ -326,23 +326,23 @@ def fill_and_submit_form(page, account, company_name=None):
 
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 print(f"Application SUCCESS!")
-                msg = f"{company_name} has been applied successfully."
+                msg = f"✅ Success: {company_name} has been applied successfully."
                 subj = f"[MeroShare] Success: {company_name}"
                 send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                send_push_notification(account.get('TOKENS'), subj, msg)
+                send_push_notification(account.get('TOKENS'), username, msg)
                 return True, company_name
             else:
                 error_msg = toast_text
                 if "balance" in error_msg.lower() or "insufficient" in error_msg.lower():
-                    subj = username
-                    msg = f"Your IPO has not been applied due to insufficient balance. Please topup amount and try again."
+                    msg = f"⚠️ Failed: Insufficient balance for {company_name}. Please topup."
+                    subj = f"[MeroShare] Failed: {company_name}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                    send_push_notification(account.get('TOKENS'), subj, msg)
+                    send_push_notification(account.get('TOKENS'), username, msg)
                 else:
-                    subj = username
-                    msg = f"❌ FAILED: {error_msg}"
+                    msg = f"❌ Failed: {error_msg} for {company_name}"
+                    subj = f"[MeroShare] Failed: {company_name}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                    send_push_notification(account.get('TOKENS'), subj, msg)
+                    send_push_notification(account.get('TOKENS'), username, msg)
                 return False, error_msg
         except:
              if not page.is_visible("#transactionPIN"):
@@ -816,13 +816,13 @@ def check_status(page, account):
                                 val = label.innerText.split(':')[1].trim();
                             }
                             
-                            // Filter out garbage (dates, times, too short)
+                            # Filter out garbage (dates, times, too short)
                             if (val && (val.toLowerCase().includes('date') || val.toLowerCase().includes('time') || val.length < 3)) return null;
 
                             return val;
                         };
                         
-                        // Prioritize specific status fields
+                        # Prioritize specific status fields
                         const statusKeys = ['block amount status', 'verification status', 'bank status', 'status'];
                         let statusLine = null;
                         for (const k of statusKeys) {
@@ -830,7 +830,7 @@ def check_status(page, account):
                             if (statusLine) break;
                         }
                         
-                        // Fallback: Check if common status words are present in the body
+                        # Fallback: Check if common status words are present in the body
                         if (!statusLine || statusLine.length < 3) {
                             if (bodyText.includes('verified') && !bodyText.includes('unverified')) statusLine = 'verified';
                             else if (bodyText.includes('rejected')) statusLine = 'rejected';
@@ -874,11 +874,11 @@ def check_status(page, account):
                             # No notification sent when reapply enabled but button missing (silent end)
                     else:
                         print(f"[{username}] Auto-reapply disabled. Sending rejection notification.")
-                        subj = username
-                        msg_body = f"Your IPO ({target_ipo}) was rejected. REMARK: {remark_val}."
+                        subj = f"[MeroShare] Rejected: {target_ipo}"
+                        msg_body = f"❌ Rejected: {target_ipo}. REMARK: {remark_val}."
                         body_email = f"Hi {username},\n\n{msg_body}\n\nTo reapply, please topup and the automation will retry in the next scheduled run."
                         send_email_notification(account.get('EMAIL'), subj, body_email)
-                        send_push_notification(account.get('TOKENS'), subj, msg_body)
+                        send_push_notification(account.get('TOKENS'), username, msg_body)
                 else:
                     print(f"[{username}] ⏳ {target_ipo} still pending ({status_val}).")
 
@@ -942,10 +942,10 @@ def run_automation():
 
                     if balance is not None and balance < MIN_BALANCE:
                         print(f"[{username}] ⚠️ Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
-                        subj = username
-                        msg = f"⚠️ Low Bank Balance! Rs.{balance:.2f} balance. Please top up to apply for IPO."
+                        subj = f"[MeroShare] Low Balance: {username}"
+                        msg = f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up to apply for IPO."
                         send_email_notification(account.get('EMAIL'), subj, msg)
-                        send_push_notification(account.get('TOKENS'), subj, msg)
+                        send_push_notification(account.get('TOKENS'), username, msg)
                         continue
 
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
@@ -1096,13 +1096,11 @@ def run_status_check():
                     
                     # Notification logic
                     if "Not Allotted" in feedback:
-                        subj = account.get('MEROSHARE_USER', 'Unknown')
-                        msg = f"{company_name} is not alloted."
-                        send_push_notification(account.get('TOKENS'), subj, msg)
+                        msg = f"❌ Not Allotted: {company_name}."
+                        send_push_notification(account.get('TOKENS'), username, msg)
                     elif "Allotted" in feedback:
-                        subj = account.get('MEROSHARE_USER', 'Unknown')
-                        msg = f"Congratulations!! {company_name} has been alloted for this account."
-                        send_push_notification(account.get('TOKENS'), subj, msg)
+                        msg = f"✅ Allotted: {company_name}! Congratulations."
+                        send_push_notification(account.get('TOKENS'), username, msg)
 
                     # Reset modal/state if needed (Escape usually works for modals)
                     page.keyboard.press("Escape")

@@ -149,8 +149,8 @@ def run_automation():
                                 tokens = [row[0] for row in cur.fetchall()]
                                 send_push_notification(
                                     tokens,
-                                    "⚠️ Low Bank Balance!",
-                                    f"{acc['meroshare_user']}: Rs.{balance:.2f} balance. Please top up to apply for IPO.",
+                                    acc['meroshare_user'],
+                                    f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up to apply for IPO.",
                                 )
 
                             # Log and move on to next account
@@ -229,11 +229,11 @@ def run_automation():
                             )
                             tokens = [row[0] for row in cur.fetchall()]
                             if status == "Success":
-                                notif_title = "✅ IPO Applied!"
-                                notif_body = remark
+                                notif_title = acc['meroshare_user']
+                                notif_body = f"✅ Success: {ipo_name} applied successfully."
                             else:
-                                notif_title = f"⚠️ IPO {status}"
-                                notif_body = f"{acc['meroshare_user']}: {remark}"
+                                notif_title = acc['meroshare_user']
+                                notif_body = f"⚠️ {status}: {remark}"
                             send_push_notification(tokens, notif_title, notif_body)
                     except Exception as notif_err:
                         print(f"  ⚠️  Notification error for {acc['meroshare_user']}: {notif_err}")
