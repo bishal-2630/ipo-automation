@@ -133,7 +133,7 @@ def handle_password_reset(page, account):
             
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User (FCM Only as per preference)
-                msg = f"Your MeroShare password has been automatically reset because it expired.\n\nNew Password: {new_password}\n\nPlease update your GitHub secrets if the automatic update failed."
+                msg = f"Password has been changed successfully. Your new password is {new_password}"
                 send_push_notification(account.get('TOKENS'), username, msg)
                 
                 # Update records
@@ -153,7 +153,7 @@ def handle_password_reset(page, account):
              if "change-password" not in page.url and (page.locator("text=My ASBA").first.is_visible() or "dashboard" in page.url):
                  print(f"[{username}] Password reset appears successful (redirected).")
                  # Notify User (FCM Only as per preference)
-                 msg = f"Your MeroShare password for {username} has been automatically reset.\n\nNew Password: {new_password}"
+                 msg = f"Password has been changed successfully. Your new password is {new_password}"
                  send_push_notification(account.get('TOKENS'), username, msg)
                  
                  # Update records
