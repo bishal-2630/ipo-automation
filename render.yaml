@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ipo-automation
+    env: docker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ipo-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: 1
+      - key: DEBUG
+        value: "False"
+
+databases:
+  - name: ipo-db
+    plan: free

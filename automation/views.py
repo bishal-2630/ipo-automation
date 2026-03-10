@@ -113,6 +113,8 @@ class HealthView(APIView):
     def get(self, request):
         import os
         from cryptography.fernet import Fernet
+        from django.conf import settings
+        
         key = os.environ.get("ENCRYPTION_KEY", "").strip()
         key_valid = False
         error_msg = None
@@ -123,22 +125,44 @@ class HealthView(APIView):
         except Exception as e:
             error_msg = str(e)
             
+        index_path = os.path.join(settings.BASE_DIR, 'frontend', 'index.html')
+        index_exists = os.path.exists(index_path)
+
+        db_ok = False
+        db_error = None
+        try:
+            from django.db import connections
+            from django.db.utils import OperationalError
+            db_conn = connections['default']
+            db_conn.cursor()
+            db_ok = True
+        except OperationalError as e:
+            db_error = str(e)
+        except Exception as e:
+            db_error = f"Unexpected error: {str(e)}"
+            
         return Response({
             "status": "online",
             "version": "v3.17-final",
             "encryption_key_length": len(key),
             "encryption_key_valid": key_valid,
             "encryption_error": error_msg,
-            "branch": "user-part-1"
+            "branch": "website-ipo",
+            "base_dir": str(settings.BASE_DIR),
+            "index_html_exists": index_exists,
+            "index_path": index_path,
+            "db_reachable": db_ok,
+            "db_error": db_error
         })
 
 def home_view(request):
+    from django.shortcuts import render
     from django.http import HttpResponse
-    return HttpResponse("""
-        <div style='background: #1a1a1a; color: #00ff00; padding: 20px; font-family: monospace;'>
-            <h1>🚀 IPO AUTOMATION BACKEND</h1>
-            <p style='color: #ff00ff; font-size: 20px;'>VERSION: v3.13 (Mar 03 - 03:15)</p>
-            <p>Branch: user-part-1</p>
-            <p>Access the API at <a href='/api/' style='color: #00ffff;'>/api/</a>.</p>
-        </div>
-    """)
+    import os
+    from django.conf import settings
+    
+    index_path = os.path.join(settings.BASE_DIR, 'frontend', 'index.html')
+    if not os.path.exists(index_path):
+        return HttpResponse(f"Error: index.html not found at {index_path}. Static files might not be collected or build might have failed.", status=500)
+    
+    return render(request, 'index.html')

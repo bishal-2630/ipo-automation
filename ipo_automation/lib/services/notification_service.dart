@@ -1,10 +1,10 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 import 'api_service.dart';
-import 'dart:io';
 
 class NotificationService {
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  FirebaseMessaging? _fcm;
   final ApiService _api = ApiService();
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
@@ -16,42 +16,59 @@ class NotificationService {
   );
 
   Future<void> initialize() async {
+    try {
+      _fcm = FirebaseMessaging.instance;
+    } catch (e) {
+      print("Could not get FirebaseMessaging instance: $e");
+      return;
+    }
+
+    final fcm = _fcm;
+    if (fcm == null) return;
+
     // 1. Request Permission
-    NotificationSettings settings = await _fcm.requestPermission(
+    NotificationSettings settings = await fcm.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // 2. Setup Local Notifications for Foreground
-      const AndroidInitializationSettings initializationSettingsAndroid =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-      const InitializationSettings initializationSettings =
-          InitializationSettings(android: initializationSettingsAndroid);
-      
-      await _localNotifications.initialize(initializationSettings);
+      if (!kIsWeb) {
+        // 2. Setup Local Notifications for Foreground (Mobile only)
+        const AndroidInitializationSettings initializationSettingsAndroid =
+            AndroidInitializationSettings('@mipmap/ic_launcher');
+        const InitializationSettings initializationSettings =
+            InitializationSettings(android: initializationSettingsAndroid);
+        
+        await _localNotifications.initialize(initializationSettings);
 
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_channel);
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          await _localNotifications
+              .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+              ?.createNotificationChannel(_channel);
+        }
+      }
 
-      // 3. Register Token
-      String? token = await _fcm.getToken();
+      String? token = await fcm.getToken();
       if (token != null) {
-        await _api.saveFcmToken(token, Platform.operatingSystem);
+        String os = kIsWeb ? 'web' : defaultTargetPlatform.name;
+        await _api.saveFcmToken(token, os);
       }
 
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-        _api.saveFcmToken(newToken, Platform.operatingSystem);
+        String os = kIsWeb ? 'web' : defaultTargetPlatform.name;
+        _api.saveFcmToken(newToken, os);
       });
 
       // 4. Listeners
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (kIsWeb) return; // Local notifications skip on web for now
+
         RemoteNotification? notification = message.notification;
         AndroidNotification? android = message.notification?.android;
 
-        if (notification != null && android != null) {
+        if (notification != null && android != null && defaultTargetPlatform == TargetPlatform.android) {
           _localNotifications.show(
             notification.hashCode,
             notification.title,
