@@ -4,8 +4,10 @@ FROM debian:latest AS build-env
 RUN apt-get update && apt-get install -y curl git wget unzip xz-utils libglu1-mesa
 
 # Install Flutter
-RUN git clone https://github.com/flutter/flutter.git /usr/local/flutter
+ENV TAR_OPTIONS="--no-same-owner"
+RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
 ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
+RUN flutter config --no-analytics
 RUN flutter doctor
 
 # Copy app code
