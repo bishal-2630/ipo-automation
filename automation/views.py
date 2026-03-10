@@ -127,6 +127,19 @@ class HealthView(APIView):
             
         index_path = os.path.join(settings.BASE_DIR, 'frontend', 'index.html')
         index_exists = os.path.exists(index_path)
+
+        db_ok = False
+        db_error = None
+        try:
+            from django.db import connections
+            from django.db.utils import OperationalError
+            db_conn = connections['default']
+            db_conn.cursor()
+            db_ok = True
+        except OperationalError as e:
+            db_error = str(e)
+        except Exception as e:
+            db_error = f"Unexpected error: {str(e)}"
             
         return Response({
             "status": "online",
@@ -137,7 +150,9 @@ class HealthView(APIView):
             "branch": "website-ipo",
             "base_dir": str(settings.BASE_DIR),
             "index_html_exists": index_exists,
-            "index_path": index_path
+            "index_path": index_path,
+            "db_reachable": db_ok,
+            "db_error": db_error
         })
 
 def home_view(request):
