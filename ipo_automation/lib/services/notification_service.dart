@@ -1,7 +1,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 import 'api_service.dart';
-import 'dart:io';
+import 'dart:io' show Platform; // Use show Platform to be specific, or avoid if possible
 
 class NotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
@@ -24,34 +25,42 @@ class NotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // 2. Setup Local Notifications for Foreground
-      const AndroidInitializationSettings initializationSettingsAndroid =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-      const InitializationSettings initializationSettings =
-          InitializationSettings(android: initializationSettingsAndroid);
-      
-      await _localNotifications.initialize(initializationSettings);
+      if (!kIsWeb) {
+        // 2. Setup Local Notifications for Foreground (Mobile only)
+        const AndroidInitializationSettings initializationSettingsAndroid =
+            AndroidInitializationSettings('@mipmap/ic_launcher');
+        const InitializationSettings initializationSettings =
+            InitializationSettings(android: initializationSettingsAndroid);
+        
+        await _localNotifications.initialize(initializationSettings);
 
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_channel);
+        if (Platform.isAndroid) {
+          await _localNotifications
+              .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+              ?.createNotificationChannel(_channel);
+        }
+      }
 
       // 3. Register Token
       String? token = await _fcm.getToken();
       if (token != null) {
-        await _api.saveFcmToken(token, Platform.operatingSystem);
+        String os = kIsWeb ? 'web' : Platform.operatingSystem;
+        await _api.saveFcmToken(token, os);
       }
 
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-        _api.saveFcmToken(newToken, Platform.operatingSystem);
+        String os = kIsWeb ? 'web' : Platform.operatingSystem;
+        _api.saveFcmToken(newToken, os);
       });
 
       // 4. Listeners
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (kIsWeb) return; // Local notifications skip on web for now
+
         RemoteNotification? notification = message.notification;
         AndroidNotification? android = message.notification?.android;
 
-        if (notification != null && android != null) {
+        if (notification != null && android != null && Platform.isAndroid) {
           _localNotifications.show(
             notification.hashCode,
             notification.title,
