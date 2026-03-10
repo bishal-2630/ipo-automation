@@ -133,12 +133,5 @@ class HealthView(APIView):
         })
 
 def home_view(request):
-    from django.http import HttpResponse
-    return HttpResponse("""
-        <div style='background: #1a1a1a; color: #00ff00; padding: 20px; font-family: monospace;'>
-            <h1>🚀 IPO AUTOMATION BACKEND</h1>
-            <p style='color: #ff00ff; font-size: 20px;'>VERSION: v3.13 (Mar 03 - 03:15)</p>
-            <p>Branch: user-part-1</p>
-            <p>Access the API at <a href='/api/' style='color: #00ffff;'>/api/</a>.</p>
-        </div>
-    """)
+    from django.shortcuts import render
+    return render(request, 'index.html')
