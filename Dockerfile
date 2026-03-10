@@ -33,8 +33,8 @@ COPY . .
 
 # Copy built frontend from Stage 1 to a directory Django can serve
 # We will serve this via WhiteNoise
-RUN mkdir -p /app/staticfiles/web
-COPY --from=build-env /app/ipo_automation/build/web /app/staticfiles/web
+RUN mkdir -p /app/frontend
+COPY --from=build-env /app/ipo_automation/build/web /app/frontend
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
