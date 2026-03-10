@@ -33,13 +33,23 @@ void main() async {
     }
   }
 
-  final notificationService = NotificationService();
-  await notificationService.initialize();
+  try {
+    final notificationService = NotificationService();
+    await notificationService.initialize();
+  } catch (e) {
+    print("Notification service initialization failed: $e");
+  }
   
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('token');
+  bool isLoggedIn = false;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    isLoggedIn = token != null;
+  } catch (e) {
+    print("SharedPreferences initialization failed: $e");
+  }
 
-  runApp(IPOApp(isLoggedIn: token != null));
+  runApp(IPOApp(isLoggedIn: isLoggedIn));
 }
 
 class IPOApp extends StatelessWidget {
