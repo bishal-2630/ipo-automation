@@ -1,5 +1,8 @@
-from .models import Account, ApplicationLog, FCMToken, BankAccount
-from .serializers import AccountSerializer, ApplicationLogSerializer, FCMTokenSerializer, BankAccountSerializer
+from .models import Account, ApplicationLog, FCMToken, BankAccount, BankOTP
+from .serializers import (
+    AccountSerializer, ApplicationLogSerializer, FCMTokenSerializer, 
+    BankAccountSerializer, BankOTPSerializer
+)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
@@ -73,6 +76,42 @@ class ApplicationLogViewSet(viewsets.ModelViewSet):
         unreads = self.get_queryset().filter(is_read=False)
         unreads.update(is_read=True)
         return Response({'status': 'marked as read'})
+
+
+class BankOTPViewSet(viewsets.ModelViewSet):
+    serializer_class = BankOTPSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return BankOTP.objects.filter(account__owner=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        # We allow lookup by account ID or meroshare_user
+        account_id = request.data.get('account')
+        meroshare_user = request.data.get('meroshare_user')
+        otp_code = request.data.get('otp_code')
+
+        if not otp_code:
+            return Response({'error': 'otp_code is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if account_id:
+                account = Account.objects.get(id=account_id, owner=request.user)
+            elif meroshare_user:
+                account = Account.objects.get(meroshare_user=meroshare_user, owner=request.user)
+            else:
+                return Response({'error': 'account or meroshare_user is required'}, status=status.HTTP_400_BAD_REQUEST)
+        except Account.DoesNotExist:
+            return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Create new OTP entry
+        otp_obj = BankOTP.objects.create(
+            account=account,
+            otp_code=otp_code
+        )
+        serializer = self.get_serializer(otp_obj)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class RegisterView(APIView):

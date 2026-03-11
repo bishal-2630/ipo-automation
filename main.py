@@ -981,6 +981,7 @@ def run_automation():
                             phone_number=account['BANK_PHONE'],
                             password=account['BANK_PASS'],
                             page=bank_page,
+                            account_id=account.get('ID')
                         )
                     except Exception as e:
                         print(f"[{username}] Warning: Bank balance check failed: {e}")

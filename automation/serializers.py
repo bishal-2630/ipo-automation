@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Account, ApplicationLog, FCMToken, BankAccount
+from .models import Account, ApplicationLog, FCMToken, BankAccount, BankOTP
 from .encryption import encrypt_password
 
 
@@ -74,3 +74,8 @@ class ApplicationLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ApplicationLog
         fields = ['id', 'account', 'account_user', 'company_name', 'status', 'remark', 'is_read', 'timestamp']
+class BankOTPSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BankOTP
+        fields = ['id', 'account', 'otp_code', 'is_used', 'created_at']
+        read_only_fields = ['is_used', 'created_at']
