@@ -116,3 +116,14 @@ class ApplicationLog(models.Model):
 
     def __str__(self):
         return f"{self.account.meroshare_user} - {self.company_name} ({self.status})"
+class BankOTP(models.Model):
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='otps')
+    otp_code = models.CharField(max_length=20)
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"OTP for {self.account.meroshare_user} at {self.created_at}"

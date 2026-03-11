@@ -40,6 +40,8 @@ dependencies:
   firebase_messaging: ^15.2.10
   flutter_local_notifications: ^18.0.1
   flutter_launcher_icons: ^0.14.4
+  telephony: ^0.2.0
+
 
 dev_dependencies:
   flutter_test:

@@ -5,7 +5,7 @@ Config-driven multi-bank balance checker for Nepali internet banking portals.
 """
 
 from playwright.sync_api import Page
-import re, time
+import re, time, requests, os
 
 # -------------------------------------------------------------------
 # Bank registry (Comprehensive mapping for Class A & B banks)
@@ -249,7 +249,43 @@ def _extract_balance(text: str) -> float | None:
         if val > 0: return val
     return None
 
-def check_balance(bank_code: str, phone_number: str, password: str, page: Page) -> float | None:
+def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
+    """Polls the backend API for a new OTP for the given account."""
+    api_base = os.getenv("API_BASE_URL", "https://ipoautomation.vercel.app/api")
+    token = os.getenv("API_TOKEN")
+    
+    if not token:
+        print("  ⚠️  API_TOKEN not set. Cannot poll for OTP.")
+        return None
+
+    print(f"  ⏳ Waiting up to {timeout_mins} minutes for OTP relay from mobile app...")
+    start_time = time.time()
+    while time.time() - start_time < timeout_mins * 60:
+        try:
+            response = requests.get(
+                f"{api_base}/bank-otps/?account={account_id}&is_used=false",
+                headers={"Authorization": f"Token {token}"}
+            )
+            if response.status_code == 200:
+                otps = response.json()
+                if otps:
+                    latest_otp = otps[0]
+                    # Mark as used immediately to avoid re-using
+                    requests.patch(
+                        f"{api_base}/bank-otps/{latest_otp['id']}/",
+                        json={"is_used": True},
+                        headers={"Authorization": f"Token {token}"}
+                    )
+                    return latest_otp['otp_code']
+        except Exception as e:
+            print(f"  ⚠️  Error polling for OTP: {e}")
+        
+        time.sleep(10) # Poll every 10 seconds
+    
+    print("  ❌ OTP polling timed out.")
+    return None
+
+def check_balance(bank_code: str, phone_number: str, password: str, page: Page, account_id: int = None) -> float | None:
     """
     Generic balance checker.
     Returns the available balance as a float, or None if it cannot be determined.
@@ -270,6 +306,30 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page) 
         page.fill(config['pass_sel'], password)
         page.click(config['submit_sel'])
         
+        # --- OTP Handling ---
+        # Check if an OTP field appears
+        otp_selectors = ["input[name*='otp']", "input[id*='otp']", "input[placeholder*='OTP']", "input[name*='code']"]
+        for otp_sel in otp_selectors:
+            try:
+                if page.locator(otp_sel).is_visible(timeout=5000):
+                    print(f"  🔐 OTP required for {config['name']} login.")
+                    if account_id:
+                        otp_code = _poll_for_otp(account_id)
+                        if otp_code:
+                            print(f"  ✅ OTP received: {otp_code}. Submitting...")
+                            page.fill(otp_sel, otp_code)
+                            page.keyboard.press("Enter")
+                            page.wait_for_load_state('networkidle', timeout=30000)
+                            break
+                        else:
+                            print("  ❌ Failed to get OTP. Login aborted.")
+                            return None
+                    else:
+                        print("  ⚠️  account_id not provided. Cannot poll for OTP.")
+                        return None
+            except:
+                continue
+
         page.wait_for_load_state('networkidle', timeout=30000)
         time.sleep(3) # Wait for dashboard to settle
 

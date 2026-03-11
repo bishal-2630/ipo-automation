@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home.dart';
 import 'screens/login_screen.dart';
 import 'services/notification_service.dart';
+import 'services/otp_relay_service.dart';
 
 // Top-level background message handler
 @pragma('vm:entry-point')
@@ -22,6 +23,9 @@ void main() async {
 
   final notificationService = NotificationService();
   await notificationService.initialize();
+  
+  final otpRelayService = OtpRelayService();
+  otpRelayService.initialize();
   
   final prefs = await SharedPreferences.getInstance();
   final token = prefs.getString('token');
