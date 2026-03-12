@@ -135,10 +135,26 @@ def run_automation():
                         finally:
                             bank_page.close()
 
+                        if balance is not None:
+                            status = "Low Balance" if balance < MIN_BALANCE else "Success"
+                            remark = f"Balance: Rs.{balance:.2f}"
+                            if balance < MIN_BALANCE:
+                                remark += f" (min Rs.{MIN_BALANCE:.2f})"
+                        else:
+                            status = "Failed"
+                            remark = "Failed to retrieve balance"
+
+                        # Log to database
+                        cur.execute("""
+                            INSERT INTO automation_applicationlog
+                                (account_id, company_name, status, remark, timestamp, is_read)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (acc['id'], "Balance Check", status, remark,
+                                datetime.datetime.now(datetime.timezone.utc), False))
+                        conn.commit()
+
                         if balance is not None and balance < MIN_BALANCE:
                             print(f"  ⚠️  Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
-                            status = "Skipped"
-                            remark = f"Insufficient balance: Rs.{balance:.2f} (min Rs.{MIN_BALANCE:.2f})"
 
                             # Notify account holder
                             if acc.get('owner_id'):
@@ -153,14 +169,6 @@ def run_automation():
                                     f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up to apply for IPO.",
                                 )
 
-                            # Log and move on to next account
-                            cur.execute("""
-                                INSERT INTO automation_applicationlog
-                                    (account_id, company_name, status, remark, timestamp, is_read)
-                                VALUES (%s, %s, %s, %s, %s, %s)
-                            """, (acc['id'], "Balance Check", status, remark,
-                                  datetime.datetime.now(datetime.timezone.utc), False))
-                            conn.commit()
                             page.close()
                             continue
 

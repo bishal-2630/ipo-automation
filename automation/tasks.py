@@ -57,9 +57,49 @@ def apply_ipo_task(account_id):
         # 3. Execute Automation
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+            context = browser.new_context(
+                permissions=['geolocation'],
+                geolocation={'latitude': 27.7172, 'longitude': 85.3240},
+                viewport={'width': 1280, 'height': 720}
+            )
+            page = context.new_page()
             
             try:
+                # 3.1 Bank Balance Check
+                from bank_checkers.bank import check_balance
+                from .models import BankAccount
+                
+                bank_acc = BankAccount.objects.filter(linked_account=account_obj).first()
+                if bank_acc:
+                    print(f"[{account_obj.meroshare_user}] Checking bank balance...")
+                    bank_page = context.new_page()
+                    try:
+                        balance = check_balance(
+                            bank_code=bank_acc.bank,
+                            phone_number=bank_acc.phone_number,
+                            password=bank_acc.get_bank_password(),
+                            page=bank_page,
+                            account_id=account_obj.id
+                        )
+                        
+                        status = "Success"
+                        remark = f"Balance: Rs.{balance:.2f}" if balance is not None else "Failed to retrieve balance"
+                        
+                        if balance is not None and balance < 2000.0: # MIN_BALANCE
+                            status = "Low Balance"
+                        
+                        ApplicationLog.objects.create(
+                            account=account_obj,
+                            company_name="Balance Check",
+                            status=status,
+                            remark=remark
+                        )
+                        print(f"[{account_obj.meroshare_user}] Bank Balance: {remark}")
+                    except Exception as bank_err:
+                        print(f"Error checking bank balance for {account_obj.meroshare_user}: {bank_err}")
+                    finally:
+                        bank_page.close()
+
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
                 login_result = login(page, account_data['MEROSHARE_USER'], account_data['MEROSHARE_PASS'], account_data['DP_NAME'])
                 

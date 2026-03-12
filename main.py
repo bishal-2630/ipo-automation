@@ -613,10 +613,10 @@ def apply_ipo(page, account):
 
     if clicked_ipo:
         print(f"[{username}] Targeted IPO: {clicked_ipo}")
+
         return fill_and_submit_form(page, account, company_name=clicked_ipo)
     else:
         print(f"[{username}] No 'Ordinary Shares' found to apply. Skipping silently.")
-        page.screenshot(path=f"debug_asba_{username}.png")
         return False, "No ordinary shares found"
 
 def get_accounts():
@@ -970,33 +970,63 @@ def run_automation():
             print(f"Processing Account {i+1}/{count}: {username}")
             print(f"=============================================")
 
-            page = browser.new_page()
-            try:
-                # 0. Bank Balance Check
-                if account.get('BANK_CODE') and account.get('BANK_PHONE') and account.get('BANK_PASS'):
-                    bank_page = browser.new_page()
-                    try:
-                        balance = check_balance(
-                            bank_code=account['BANK_CODE'],
-                            phone_number=account['BANK_PHONE'],
-                            password=account['BANK_PASS'],
-                            page=bank_page,
-                            account_id=account.get('ID')
-                        )
-                    except Exception as e:
-                        print(f"[{username}] Warning: Bank balance check failed: {e}")
-                        balance = None
-                    finally:
-                        bank_page.close()
-
+            # Create a context with geolocation permissions
+            context = browser.new_context(
+                permissions=['geolocation'],
+                geolocation={'latitude': 27.7172, 'longitude': 85.3240}, # Kathmandu
+                viewport={'width': 1280, 'height': 720}
+            )
+            # 0. Bank Balance Check
+            # Runs for every account regardless of IPO availability
+            if account.get('BANK_CODE') and account.get('BANK_PHONE') and account.get('BANK_PASS'):
+                print(f"[{username}] Checking bank balance for {account['BANK_CODE']}...")
+                bank_page = context.new_page()
+                try:
+                    balance = check_balance(
+                        bank_code=account['BANK_CODE'],
+                        phone_number=account['BANK_PHONE'],
+                        password=account['BANK_PASS'],
+                        page=bank_page,
+                        account_id=account.get('ID')
+                    )
+                    
+                    status = "Success"
+                    remark = f"Balance: Rs.{balance:.2f}" if balance is not None else "Failed to retrieve balance"
+                    
                     if balance is not None and balance < MIN_BALANCE:
-                        print(f"[{username}] ⚠️ Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
-                        subj = f"[MeroShare] Low Balance: {username}"
-                        msg = f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up to apply for IPO."
-                        send_email_notification(account.get('EMAIL'), subj, msg)
+                        print(f"[{username}] ⚠️ Low Balance: Rs.{balance:.2f}")
+                        status = "Low Balance"
+                        msg = f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up."
                         send_push_notification(account.get('TOKENS'), username, msg)
-                        continue
+                    elif balance is not None:
+                        print(f"[{username}] Balance OK: Rs.{balance:.2f}")
 
+                    # Log to database if enabled
+                    db_url = os.getenv("DATABASE_URL")
+                    if db_url:
+                        try:
+                            import psycopg2
+                            conn = psycopg2.connect(db_url)
+                            cur = conn.cursor()
+                            cur.execute("""
+                                INSERT INTO automation_applicationlog
+                                    (account_id, company_name, status, remark, timestamp, is_read)
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                            """, (account.get('ID'), "Balance Check", status, remark,
+                                  datetime.datetime.now(datetime.timezone.utc), False))
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                        except Exception as db_err:
+                            print(f"Warning: Failed to log balance check: {db_err}")
+
+                except Exception as e:
+                    print(f"[{username}] Error checking bank balance: {e}")
+                finally:
+                    bank_page.close()
+
+            page = context.new_page()
+            try:
                 page.goto("https://meroshare.cdsc.com.np", timeout=60000)
                 MAX_RETRIES = 3
                 logged_in = False
