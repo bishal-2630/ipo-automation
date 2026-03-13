@@ -7,6 +7,7 @@ class Account {
   final String crn;
   final String tPin;
   final String boid;
+  final String? ownerName;
 
   Account({
     required this.id,
@@ -17,6 +18,7 @@ class Account {
     required this.crn,
     required this.tPin,
     required this.boid,
+    this.ownerName,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class Account {
       crn: json['crn'] ?? '',
       tPin: json['tpin'] ?? '',
       boid: json['boid'] ?? '',
+      ownerName: json['owner_name'],
     );
   }
 }

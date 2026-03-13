@@ -116,9 +116,9 @@ class _HomeScreenState extends State<HomeScreen> {
             return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: Colors.red)));
           }
 
-          final accounts = snapshot.data ?? [];
+          final allAccounts = snapshot.data ?? [];
 
-          if (accounts.isEmpty) {
+          if (allAccounts.isEmpty) {
             return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
           }
 
@@ -126,8 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: () async => setState(() {}),
             child: ListView.builder(
               padding: EdgeInsets.only(bottom: 80),
-              itemCount: accounts.length,
-              itemBuilder: (context, index) => _buildAccountCard(accounts[index]),
+              itemCount: allAccounts.length,
+              itemBuilder: (context, index) => _buildAccountCard(allAccounts[index]),
             ),
           );
         },
@@ -172,7 +172,33 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: Colors.deepPurple.withOpacity(0.1),
           child: Icon(Icons.person, color: Colors.deepPurple),
         ),
-        title: Text(acc.user, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                acc.user, 
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (acc.ownerName != null && acc.ownerName!.isNotEmpty)
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  acc.ownerName!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.deepPurple,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 8.0),
           child: Column(

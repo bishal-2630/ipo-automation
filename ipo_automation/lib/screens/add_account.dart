@@ -26,6 +26,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _pinController = TextEditingController();
   final _bankController = TextEditingController();
   final _boidController = TextEditingController();
+  final _ownerNameController = TextEditingController();
 
   bool get isEditMode => widget.account != null;
 
@@ -40,6 +41,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       _pinController.text = acc.tPin;
       _bankController.text = acc.bank;
       _boidController.text = acc.boid;
+      _ownerNameController.text = acc.ownerName ?? '';
       _isActive = acc.isActive;
     }
   }
@@ -55,6 +57,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           'tpin': _pinController.text,
           'bank_name': _bankController.text,
           'boid': _boidController.text,
+          'owner_name': _ownerNameController.text,
           'is_active': _isActive,
         };
 
@@ -130,6 +133,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               _buildTextField(_crnController, "CRN Number"),
               _buildTextField(_pinController, "4-Digit PIN", keyboardType: TextInputType.number),
               _buildTextField(_bankController, "Bank Name"),
+              _buildTextField(_ownerNameController, "Owner Name (e.g., Mom, Dad, Me)", required: false),
               SwitchListTile(
                 title: Text("Active Account"),
                 subtitle: Text("IPOs will only be applied for active accounts"),
@@ -187,6 +191,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _pinController.dispose();
     _bankController.dispose();
     _boidController.dispose();
+    _ownerNameController.dispose();
     super.dispose();
   }
 }
