@@ -18,7 +18,7 @@ BANK_CONFIGS: dict[str, dict] = {
         "user_sel": "#nd-input-1, input[placeholder='Enter Mobile Number']",
         "pass_sel": "#nd-input-0, input[placeholder='Enter Password'], input[type='password']",
         "submit_sel": "button.nd-button--primary, button:has-text('Log In')",
-        "balance_sel": ".balance, .amt, .account-balance, [class*='balance'], [id*='balance'], .total-balance",
+        "balance_sel": "span.balance-amount, .available-balance, .amt-balance, .nd-balance-value, .total-balance, [class*='balance-amount']",
     },
     "nabil": {
         "name": "Nabil Bank",
@@ -547,7 +547,7 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         # Try finding by text keywords near numbers
         try:
             # Look for labels like "Available Balance", "Total Balance", etc.
-            keywords = ["Available Balance", "Total Balance", "Balance", "Account Balance"]
+            keywords = ["Available Balance", "Total Balance", "Balance", "Account Balance", "Amount"]
             for kw in keywords:
                 # Find the element containing the keyword
                 labels = page.get_by_text(kw, exact=False).all()
@@ -559,21 +559,28 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
                         if balance is not None:
                             print(f"  [Balance] Found Balance (Keyword '{kw}'): Rs. {balance:,.2f}")
                             return balance
+                        
+                        # Try next sibling
+                        sibling_text = page.evaluate("(el) => el.nextElementSibling ? el.nextElementSibling.innerText : ''", label.element_handle())
+                        balance = _extract_balance(sibling_text)
+                        if balance is not None:
+                             print(f"  [Balance] Found Balance (Sibling of '{kw}'): Rs. {balance:,.2f}")
+                             return balance
         except:
             pass
 
-        # Fallback: Scrape anything that looks like NPR / Rs balance
+        # Fallback: Scrape anything that looks like NPR / Rs balance or a currency amount
         content = page.content()
-        matches = re.findall(r'(?:Rs\.?|NPR)\s*([\d,]+(?:\.\d+)?)', content)
+        # Regex for common balance formats in Nepal (Rs. 1,234.56 or 1,234.56 NPR)
+        matches = re.findall(r'(?:Rs\.?|NPR|Amount)\s*([\d,]+(?:\.\d+)?)', content)
         if not matches:
-             # Last resort: Any large number that might be a balance if keywords "Balance" is on page
-             if any(k.lower() in content.lower() for k in ["balance", "available", "npr"]):
-                 matches = re.findall(r'[\d,]+\.\d{2}', content)
+             # Look for any large number with 2 decimal places (likely a currency amount)
+             matches = re.findall(r'[\d,]+\.\d{2}', content)
 
         for m in matches:
             val = float(m.replace(',', ''))
-            if val > 100: # Threshold to avoid tiny IDs
-                print(f"  [Balance] Found Balance (Regex): Rs. {val:,.2f}")
+            if val > 100 and val < 10000000: # Threshold to avoid tiny IDs or account numbers
+                print(f"  [Balance] Found Balance (Regex Fallback): Rs. {val:,.2f}")
                 return val
 
     except Exception as e:
