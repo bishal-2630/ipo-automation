@@ -335,33 +335,58 @@ def _find_login_fields(page: Page) -> dict:
     return found
 
 def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
-    """Polls the backend API for a new OTP for the given account."""
+    """Polls the backend (via API or Direct DB) for a new OTP for the given account."""
     api_base = os.getenv("API_BASE_URL", "https://ipoautomation.vercel.app/api")
     token = os.getenv("API_TOKEN")
+    db_url = os.getenv("DATABASE_URL")
     
-    if not token:
-        print("  [OTP] API_TOKEN not set. Cannot poll for OTP.")
+    if not token and not db_url:
+        print("  [OTP] API_TOKEN and DATABASE_URL not set. Cannot poll for OTP.")
         return None
 
-    print(f"  [OTP] Waiting up to {timeout_mins} minutes for OTP relay from mobile app...")
+    print(f"  [OTP] Waiting up to {timeout_mins} minutes for OTP relay (Account ID: {account_id})...")
     start_time = time.time()
+    
     while time.time() - start_time < timeout_mins * 60:
         try:
-            response = requests.get(
-                f"{api_base}/bank-otps/?account={account_id}&is_used=false",
-                headers={"Authorization": f"Token {token}"}
-            )
-            if response.status_code == 200:
-                otps = response.json()
-                if otps:
-                    latest_otp = otps[0]
-                    # Mark as used immediately to avoid re-using
-                    requests.patch(
-                        f"{api_base}/bank-otps/{latest_otp['id']}/",
-                        json={"is_used": True},
-                        headers={"Authorization": f"Token {token}"}
-                    )
-                    return latest_otp['otp_code']
+            # Plan A: Use REST API (Vercel/Cloud)
+            if token:
+                response = requests.get(
+                    f"{api_base}/bank-otps/?account={account_id}&is_used=false",
+                    headers={"Authorization": f"Token {token}"},
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    otps = response.json()
+                    if otps:
+                        latest_otp = otps[0]
+                        requests.patch(
+                            f"{api_base}/bank-otps/{latest_otp['id']}/",
+                            json={"is_used": True},
+                            headers={"Authorization": f"Token {token}"}
+                        )
+                        return latest_otp['otp_code']
+            
+            # Plan B: Direct Database Query (Local/Heroku/Server)
+            elif db_url:
+                import psycopg2
+                conn = psycopg2.connect(db_url)
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT otp_code, id FROM automation_bankotp "
+                    "WHERE account_id = %s AND is_used = false "
+                    "ORDER BY created_at DESC LIMIT 1", 
+                    (account_id,)
+                )
+                res = cur.fetchone()
+                if res:
+                    otp_code, otp_id = res
+                    cur.execute("UPDATE automation_bankotp SET is_used = true WHERE id = %s", (otp_id,))
+                    conn.commit()
+                    conn.close()
+                    return otp_code
+                conn.close()
+                
         except Exception as e:
             print(f"  ⚠️  Error polling for OTP: {e}")
         
