@@ -15,8 +15,12 @@ class AccountSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Account
-        fields = '__all__'
-        read_only_fields = ['owner']
+        fields = [
+            'id', 'meroshare_user', 'meroshare_pass', 'dp_name', 
+            'crn', 'tpin', 'bank_name', 'owner_name', 
+            'kitta', 'is_active', 'last_applied', 'boid'
+        ]
+        read_only_fields = ['owner', 'last_applied']
 
     def create(self, validated_data):
         plain = validated_data.pop('meroshare_pass', None)
@@ -70,10 +74,11 @@ class BankAccountSerializer(serializers.ModelSerializer):
 
 class ApplicationLogSerializer(serializers.ModelSerializer):
     account_user = serializers.CharField(source='account.meroshare_user', read_only=True)
+    owner_name = serializers.CharField(source='account.owner_name', read_only=True)
 
     class Meta:
         model = ApplicationLog
-        fields = ['id', 'account', 'account_user', 'company_name', 'status', 'remark', 'is_read', 'timestamp']
+        fields = ['id', 'account', 'account_user', 'owner_name', 'company_name', 'status', 'remark', 'is_read', 'timestamp']
 class BankOTPSerializer(serializers.ModelSerializer):
     class Meta:
         model = BankOTP

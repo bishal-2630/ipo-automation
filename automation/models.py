@@ -13,6 +13,7 @@ class Account(models.Model):
     crn = models.CharField(max_length=20)
     tpin = models.CharField(max_length=10)
     bank_name = models.CharField(max_length=255)
+    owner_name = models.CharField(max_length=50, blank=True, null=True, help_text="e.g., Mom, Dad, Me")
     kitta = models.IntegerField(default=10)
     is_active = models.BooleanField(default=True)
     last_applied = models.DateTimeField(auto_now=True)
