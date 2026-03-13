@@ -440,11 +440,21 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
             print("  ❌ Could not identify login fields. Page structure might be too complex.")
             return None
 
-        # Basic attempt at login (handle potential multi-step)
-        print("  [Demo] Waiting 2 seconds before typing username...")
-        page.wait_for_timeout(2000)
-        page.fill(user_sel, phone_number)
-        
+        # Angular-aware login: wait explicitly for field to be interactive, then click and type
+        print(f"  [Login] Waiting for username field to be visible and interactable...")
+        try:
+            page.wait_for_selector(user_sel, state="visible", timeout=30000)
+        except Exception as e:
+            print(f"  ❌ Username field never appeared: {e}")
+            return None
+
+        print(f"  [Login] Clicking and typing phone number...")
+        page.locator(user_sel).first.click()
+        page.wait_for_timeout(500)
+        page.locator(user_sel).first.fill("")
+        page.locator(user_sel).first.type(phone_number, delay=80)
+        page.wait_for_timeout(1000)
+
         # If password field is not visible, we might need to click 'Proceed' first
         if not page.locator(pass_sel).is_visible():
             proceed_sel = config.get('proceed_sel') if config else None
@@ -457,13 +467,15 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
                  page.click(submit_sel)
                  page.wait_for_timeout(2000)
 
-        page.wait_for_selector(pass_sel, timeout=10000)
-        print("  [Demo] Waiting 2 seconds before typing password...")
-        page.wait_for_timeout(2000)
-        page.fill(pass_sel, password)
+        page.wait_for_selector(pass_sel, state="visible", timeout=15000)
+        print(f"  [Login] Clicking and typing password...")
+        page.locator(pass_sel).first.click()
+        page.wait_for_timeout(500)
+        page.locator(pass_sel).first.fill("")
+        page.locator(pass_sel).first.type(password, delay=80)
+        page.wait_for_timeout(1000)
         
-        print("  [Demo] Waiting 2 seconds before submitting...")
-        page.wait_for_timeout(2000)
+        print("  [Login] Submitting form...")
         final_submit = submit_sel if submit_sel else "button[type='submit']"
         if page.locator(final_submit).first.is_visible():
             page.locator(final_submit).first.click()
