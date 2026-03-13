@@ -148,6 +148,25 @@ class ManualTriggerView(APIView):
     def post(self, request):
         run_all_accounts_task.delay()
         return Response({"status": "Automation triggered for all active accounts"}, status=status.HTTP_200_OK)
+
+
+class SecureTriggerView(APIView):
+    """
+    Experimental endpoint to trigger automation from external services like Cron-job.org.
+    Requires a secret token in the X-Trigger-Token header.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        token = request.headers.get('X-Trigger-Token')
+        expected_token = os.environ.get('TRIGGER_TOKEN')
+        
+        if not expected_token or token != expected_token:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        run_all_accounts_task.delay()
+        return Response({"status": "Automation triggered successfully"}, status=status.HTTP_200_OK)
 class HealthView(APIView):
     def get(self, request):
         import os

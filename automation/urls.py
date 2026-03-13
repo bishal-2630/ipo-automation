@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     AccountViewSet, ApplicationLogViewSet, RegisterView, LoginView, 
-    FCMTokenViewSet, ManualTriggerView, BankAccountViewSet, HealthView,
+    FCMTokenViewSet, ManualTriggerView, SecureTriggerView, BankAccountViewSet, HealthView,
     BankOTPViewSet
 )
 
@@ -18,5 +18,6 @@ urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/login/', LoginView.as_view(), name='login'),
     path('run-all/', ManualTriggerView.as_view(), name='run-all'),
+    path('trigger-automation/', SecureTriggerView.as_view(), name='secure-trigger'),
     path('health/', HealthView.as_view(), name='health'),
 ]
