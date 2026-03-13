@@ -486,7 +486,8 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         print("  [OTP/Approve] Checking for interaction prompt (waiting up to 15s)...")
         
         # Check for push approval notification (common in NIC Asia MoBank)
-        page_text = page.inner_text().lower()
+        page.wait_for_load_state('networkidle', timeout=15000)
+        page_text = page.inner_text('body').lower()
         if "approve" in page_text or "notification" in page_text or "mobile app" in page_text:
             print("  [Approve] Mobile app approval prompt detected. Please tap 'Approve' on your MoBank app.")
             print("  [Approve] Waiting up to 60s for approval...")
