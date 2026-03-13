@@ -137,6 +137,7 @@ def run_automation():
                                 phone_number=acc['phone_number'],
                                 password=decrypt(acc['bank_password']),
                                 page=bank_page,
+                                account_id=acc['id'],
                             )
                         except Exception as bank_err:
                             print(f"  ⚠️  Bank balance check raised exception: {bank_err}. Proceeding with IPO.")
