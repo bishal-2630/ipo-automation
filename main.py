@@ -116,13 +116,25 @@ def handle_password_reset(page, account):
     print(f"[{username}] Starting automatic password reset...")
     try:
         # MeroShare change password page usually has these fields
-        # Using flexible selectors in case they change
-        page.wait_for_selector("input[placeholder='Old Password'], #oldPassword", timeout=10000)
+        # Using flexible selectors and Angular-aware typing
+        page.wait_for_selector("input[placeholder='Old Password'], #oldPassword", state="visible", timeout=15000)
         
-        page.fill("input[placeholder='Old Password'], #oldPassword", old_password)
-        page.fill("input[placeholder='New Password'], #newPassword", new_password)
-        page.fill("input[placeholder='Confirm Password'], #confirmPassword", new_password)
+        # Old Password
+        page.locator("input[placeholder='Old Password'], #oldPassword").first.click()
+        page.locator("input[placeholder='Old Password'], #oldPassword").first.fill("")
+        page.locator("input[placeholder='Old Password'], #oldPassword").first.type(old_password, delay=80)
         
+        # New Password
+        page.locator("input[placeholder='New Password'], #newPassword").first.click()
+        page.locator("input[placeholder='New Password'], #newPassword").first.fill("")
+        page.locator("input[placeholder='New Password'], #newPassword").first.type(new_password, delay=80)
+        
+        # Confirm Password
+        page.locator("input[placeholder='Confirm Password'], #confirmPassword").first.click()
+        page.locator("input[placeholder='Confirm Password'], #confirmPassword").first.fill("")
+        page.locator("input[placeholder='Confirm Password'], #confirmPassword").first.type(new_password, delay=80)
+        
+        page.wait_for_timeout(1000)
         page.click("button:has-text('Change'), button:has-text('Update')")
         
         # Wait for toast message or redirection
@@ -449,30 +461,40 @@ def login(page, username, password, dp_name):
         found = False
         for selector in username_selectors:
             if page.locator(selector).is_visible():
-                page.fill(selector, username)
+                print(f"  Typing username into {selector}...")
+                page.locator(selector).first.click()
+                page.locator(selector).first.fill("")
+                page.locator(selector).first.type(username, delay=80)
                 found = True
                 break
         
         if not found:
             # If none found immediately, wait longer for the primary one
-            page.wait_for_selector("#txtUserName", timeout=20000)
-            page.fill("#txtUserName", username)
+            page.wait_for_selector("#txtUserName", state="visible", timeout=20000)
+            page.locator("#txtUserName").first.click()
+            page.locator("#txtUserName").first.fill("")
+            page.locator("#txtUserName").first.type(username, delay=80)
         
         # Small pause before password
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(1000)
         
         # Robust password selection
         password_selectors = ["#txtPassword", "input[name='password']", "input[placeholder='Password']"]
         p_found = False
         for selector in password_selectors:
             if page.locator(selector).is_visible():
-                page.fill(selector, password)
+                print(f"  Typing password into {selector}...")
+                page.locator(selector).first.click()
+                page.locator(selector).first.fill("")
+                page.locator(selector).first.type(password, delay=80)
                 p_found = True
                 break
         
         if not p_found:
-            page.wait_for_selector("#txtPassword", timeout=10000)
-            page.fill("#txtPassword", password)
+            page.wait_for_selector("#txtPassword", state="visible", timeout=10000)
+            page.locator("#txtPassword").first.click()
+            page.locator("#txtPassword").first.fill("")
+            page.locator("#txtPassword").first.type(password, delay=80)
             
     except Exception as e:
         print(f"[{username}] Could not find form fields. State at failure:")

@@ -18,7 +18,7 @@ BANK_CONFIGS: dict[str, dict] = {
         "user_sel": "#nd-input-1, input[placeholder='Enter Mobile Number']",
         "pass_sel": "#nd-input-0, input[placeholder='Enter Password'], input[type='password']",
         "submit_sel": "button.nd-button--primary, button:has-text('Log In')",
-        "balance_sel": ".balance, [class*='balance'], [id*='balance']",
+        "balance_sel": ".balance, .amt, .account-balance, [class*='balance'], [id*='balance'], .total-balance",
     },
     "nabil": {
         "name": "Nabil Bank",
@@ -544,9 +544,32 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
             except Exception:
                 continue
 
+        # Try finding by text keywords near numbers
+        try:
+            # Look for labels like "Available Balance", "Total Balance", etc.
+            keywords = ["Available Balance", "Total Balance", "Balance", "Account Balance"]
+            for kw in keywords:
+                # Find the element containing the keyword
+                labels = page.get_by_text(kw, exact=False).all()
+                for label in labels:
+                    if label.is_visible():
+                        # Look at the parent or next sibling for a number
+                        parent_text = label.locator("xpath=..").inner_text()
+                        balance = _extract_balance(parent_text)
+                        if balance is not None:
+                            print(f"  [Balance] Found Balance (Keyword '{kw}'): Rs. {balance:,.2f}")
+                            return balance
+        except:
+            pass
+
         # Fallback: Scrape anything that looks like NPR / Rs balance
         content = page.content()
         matches = re.findall(r'(?:Rs\.?|NPR)\s*([\d,]+(?:\.\d+)?)', content)
+        if not matches:
+             # Last resort: Any large number that might be a balance if keywords "Balance" is on page
+             if any(k.lower() in content.lower() for k in ["balance", "available", "npr"]):
+                 matches = re.findall(r'[\d,]+\.\d{2}', content)
+
         for m in matches:
             val = float(m.replace(',', ''))
             if val > 100: # Threshold to avoid tiny IDs
