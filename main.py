@@ -439,20 +439,44 @@ def login(page, username, password, dp_name):
         page.locator(".select2-selection, .select2-selection--single").first.click(timeout=15000)
         page.wait_for_timeout(1000)
         
-        # 2. Type the DP name into the search box
+        # 2. Type a shorter prefix of the DP name into the search box for better results
+        # e.g., "NIC ASIA BANK LTD." -> "NIC"
+        dp_prefix = dp_name.split()[0] if dp_name.split() else dp_name
         search_box = page.locator(".select2-search__field, .select2-search input")
-        search_box.first.fill(dp_name, timeout=5000)
-        page.wait_for_timeout(1000)
+        search_box.first.fill(dp_prefix, timeout=5000)
+        page.wait_for_timeout(1500)
         
-        # 3. Explicitly click the highlighted result (more robust for Angular than just Enter)
-        try:
-            page.locator(".select2-results__option--highlighted, .select2-results__option").first.click(timeout=5000)
-        except:
-            page.keyboard.press("Enter")
-            
+        # 3. Find the best match in the results
+        success = page.evaluate(f"""
+            (targetName) => {{
+                const options = Array.from(document.querySelectorAll('.select2-results__option'));
+                const target = targetName.toLowerCase().trim();
+                const match = options.find(o => o.innerText.toLowerCase().trim().includes(target)) ||
+                              options.find(o => {{
+                                  const text = o.innerText.toLowerCase();
+                                  return target.split(' ').every(word => text.includes(word));
+                              }});
+                if (match) {{
+                    match.click();
+                    return true;
+                }}
+                return false;
+            }}
+        """, dp_name)
+        
+        if not success:
+            print(f"  Warning: Specific match for '{dp_name}' not found. Clicking first result...")
+            if page.locator(".select2-results__option--highlighted, .select2-results__option").first.is_visible():
+                page.locator(".select2-results__option--highlighted, .select2-results__option").first.click()
+            else:
+                print(f"  ❌ No results found at all for DP: {dp_name}")
+                page.keyboard.press("Escape") # Close the blocking overlay
+                page.wait_for_timeout(500)
+                
         print(f"  DP selected via UI simulation.")
     except Exception as e:
         print(f"  Warning: UI DP selection failed: {e}")
+        page.keyboard.press("Escape") # Ensure overlay is closed
         page.screenshot(path=f"debug_login_dp_{username}.png")
 
     page.wait_for_timeout(1000)
