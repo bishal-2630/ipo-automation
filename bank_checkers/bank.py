@@ -657,8 +657,6 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
     finally:
         # ALWAYS take a screenshot of the dashboard for verification
         try:
-            import os # Added import for os
-            import time # Added import for time
             shots_dir = "d:\\ipoautomation\\screenshots"
             if not os.path.exists(shots_dir): os.makedirs(shots_dir)
             t_stamp = int(time.time())
