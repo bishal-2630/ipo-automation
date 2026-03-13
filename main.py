@@ -450,6 +450,12 @@ def login(page, username, password, dp_name):
         success = page.evaluate(f"""
             (targetName) => {{
                 const options = Array.from(document.querySelectorAll('.select2-results__option'));
+                if (options.length === 0) return false;
+                
+                // If there's a "No results found" message, it usually has this class
+                const noResults = options.find(o => o.innerText.includes('No results found'));
+                if (noResults) return "NO_RESULTS";
+
                 const target = targetName.toLowerCase().trim();
                 const match = options.find(o => o.innerText.toLowerCase().trim().includes(target)) ||
                               options.find(o => {{
@@ -458,28 +464,44 @@ def login(page, username, password, dp_name):
                               }});
                 if (match) {{
                     match.click();
-                    return true;
+                    return "SUCCESS";
                 }}
                 return false;
             }}
         """, dp_name)
         
-        if not success:
+        if success == "NO_RESULTS":
+            print(f"  ❌ No results found for DP: {dp_name}. Clearing overlay...")
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
+            page.keyboard.press("Escape") # Second escape for safety
+        elif success != "SUCCESS":
             print(f"  Warning: Specific match for '{dp_name}' not found. Clicking first result...")
-            if page.locator(".select2-results__option--highlighted, .select2-results__option").first.is_visible():
-                page.locator(".select2-results__option--highlighted, .select2-results__option").first.click()
+            first_option = page.locator(".select2-results__option--highlighted, .select2-results__option").first
+            if first_option.is_visible() and "No results found" not in first_option.inner_text():
+                first_option.click()
             else:
-                print(f"  ❌ No results found at all for DP: {dp_name}")
-                page.keyboard.press("Escape") # Close the blocking overlay
+                print(f"  ❌ No valid results found for DP: {dp_name}")
+                page.keyboard.press("Escape")
                 page.wait_for_timeout(500)
+                page.keyboard.press("Escape")
                 
-        print(f"  DP selected via UI simulation.")
+        print(f"  DP selection process completed.")
     except Exception as e:
         print(f"  Warning: UI DP selection failed: {e}")
-        page.keyboard.press("Escape") # Ensure overlay is closed
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
+        page.keyboard.press("Escape")
         page.screenshot(path=f"debug_login_dp_{username}.png")
 
     page.wait_for_timeout(1000)
+
+    # Ensure no Select2 overlays are blocking the input
+    try:
+        if page.locator(".select2-container--open").is_visible():
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
+    except: pass
 
     try:
         # Use a more flexible selector for username (ID, Name, or Placeholder)
@@ -487,13 +509,14 @@ def login(page, username, password, dp_name):
         found = False
         for selector in username_selectors:
             # Ensure it's the visible one (MeroShare sometimes has hidden inputs)
-            loc = page.locator(selector).filter(has_text=re.compile(r".*", re.IGNORECASE)) # Dummy filter to help visibility
-            if loc.first.is_visible():
+            loc = page.locator(selector).first
+            if loc.is_visible():
                 print(f"  Typing username into {selector}...")
-                loc.first.click()
+                # Use force=True for click if something is partially overlapping
+                loc.click(force=True)
                 page.wait_for_timeout(300)
-                loc.first.fill("")
-                loc.first.type(username, delay=100)
+                loc.fill("")
+                loc.type(username, delay=100)
                 found = True
                 break
         
