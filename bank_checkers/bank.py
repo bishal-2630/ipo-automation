@@ -15,9 +15,9 @@ BANK_CONFIGS: dict[str, dict] = {
     "nic_asia": {
         "name": "NIC Asia Bank",
         "url": "https://omni.nicasiabank.com/sign-in",
-        "user_sel": "input[placeholder*='Mobile'], input[placeholder*='mobile'], input[name*='mobile' i], input[id*='mobile' i], input[formcontrolname*='mobile' i], input[type='text']",
-        "pass_sel": "input[type='password']",
-        "submit_sel": "button:has-text('Log In'), button:has-text('Login'), button:has-text('Sign In'), button[type='submit']",
+        "user_sel": "#nd-input-1, input[placeholder='Enter Mobile Number']",
+        "pass_sel": "#nd-input-0, input[placeholder='Enter Password'], input[type='password']",
+        "submit_sel": "button.nd-button--primary, button:has-text('Log In')",
         "balance_sel": ".balance, [class*='balance'], [id*='balance']",
     },
     "nabil": {
