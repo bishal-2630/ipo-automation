@@ -457,7 +457,7 @@ def login(page, username, password, dp_name):
 
     try:
         # Use a more flexible selector for username (ID, Name, or Placeholder)
-        username_selectors = ["#txtUserName", "input[name='username']", "input[placeholder='Username']"]
+        username_selectors = ["#username", "#txtUserName", "input[name='username']", "input[placeholder='Username']"]
         found = False
         for selector in username_selectors:
             if page.locator(selector).is_visible():
@@ -470,16 +470,16 @@ def login(page, username, password, dp_name):
         
         if not found:
             # If none found immediately, wait longer for the primary one
-            page.wait_for_selector("#txtUserName", state="visible", timeout=20000)
-            page.locator("#txtUserName").first.click()
-            page.locator("#txtUserName").first.fill("")
-            page.locator("#txtUserName").first.type(username, delay=80)
+            page.wait_for_selector("#username", state="visible", timeout=15000)
+            page.locator("#username").first.click()
+            page.locator("#username").first.fill("")
+            page.locator("#username").first.type(username, delay=80)
         
         # Small pause before password
         page.wait_for_timeout(1000)
         
         # Robust password selection
-        password_selectors = ["#txtPassword", "input[name='password']", "input[placeholder='Password']"]
+        password_selectors = ["#password", "#txtPassword", "input[name='password']", "input[placeholder='Password']"]
         p_found = False
         for selector in password_selectors:
             if page.locator(selector).is_visible():
@@ -491,10 +491,10 @@ def login(page, username, password, dp_name):
                 break
         
         if not p_found:
-            page.wait_for_selector("#txtPassword", state="visible", timeout=10000)
-            page.locator("#txtPassword").first.click()
-            page.locator("#txtPassword").first.fill("")
-            page.locator("#txtPassword").first.type(password, delay=80)
+            page.wait_for_selector("#password", state="visible", timeout=10000)
+            page.locator("#password").first.click()
+            page.locator("#password").first.fill("")
+            page.locator("#password").first.type(password, delay=80)
             
     except Exception as e:
         print(f"[{username}] Could not find form fields. State at failure:")
