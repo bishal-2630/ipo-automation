@@ -109,11 +109,20 @@ def run_automation():
                     '--window-size=1280,720'
                 ]
             )
+            
+            # Use stealth context to bypass Anti-Bot
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 720},
+                permissions=['geolocation'],
+                geolocation={'latitude': 27.7172, 'longitude': 85.3240},
+                extra_http_headers={ "Accept-Language": "en-US,en;q=0.9" }
+            )
 
             for acc in accounts:
                 print(f"\n{'='*50}")
                 print(f"Processing: {acc['meroshare_user']}")
-                page = browser.new_page()
+                page = context.new_page()
                 status = "Error"
                 remark = "Unknown error"
                 ipo_name = "Auto-Check"  # Always initialise before try/finally
@@ -121,7 +130,7 @@ def run_automation():
                 try:
                     # 2. Bank balance check (if bank credentials are linked)
                     if acc.get('bank') and acc.get('phone_number') and acc.get('bank_password'):
-                        bank_page = browser.new_page()
+                        bank_page = context.new_page()
                         try:
                             balance = check_balance(
                                 bank_code=acc['bank'],
