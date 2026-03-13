@@ -179,7 +179,9 @@ def handle_password_reset(page, account):
                  
     except Exception as e:
         print(f"[{username}] Error during password reset: {e}")
-        page.screenshot(path=f"debug_reset_fail_{username}.png")
+        try:
+            page.screenshot(path=f"debug_reset_fail_{username}.png")
+        except: pass
         
     return False
 def fill_and_submit_form(page, account, company_name=None):
@@ -460,20 +462,25 @@ def login(page, username, password, dp_name):
         username_selectors = ["#username", "#txtUserName", "input[name='username']", "input[placeholder='Username']"]
         found = False
         for selector in username_selectors:
-            if page.locator(selector).is_visible():
+            # Ensure it's the visible one (MeroShare sometimes has hidden inputs)
+            loc = page.locator(selector).filter(has_text=re.compile(r".*", re.IGNORECASE)) # Dummy filter to help visibility
+            if loc.first.is_visible():
                 print(f"  Typing username into {selector}...")
-                page.locator(selector).first.click()
-                page.locator(selector).first.fill("")
-                page.locator(selector).first.type(username, delay=80)
+                loc.first.click()
+                page.wait_for_timeout(300)
+                loc.first.fill("")
+                loc.first.type(username, delay=100)
                 found = True
                 break
         
         if not found:
             # If none found immediately, wait longer for the primary one
+            print(f"  Attempting wait for primary username selector...")
             page.wait_for_selector("#username", state="visible", timeout=15000)
             page.locator("#username").first.click()
+            page.wait_for_timeout(300)
             page.locator("#username").first.fill("")
-            page.locator("#username").first.type(username, delay=80)
+            page.locator("#username").first.type(username, delay=100)
         
         # Small pause before password
         page.wait_for_timeout(1000)
@@ -482,23 +489,30 @@ def login(page, username, password, dp_name):
         password_selectors = ["#password", "#txtPassword", "input[name='password']", "input[placeholder='Password']"]
         p_found = False
         for selector in password_selectors:
-            if page.locator(selector).is_visible():
+            # Check if element is visible and attached
+            loc = page.locator(selector).filter(has_text=re.compile(r".*", re.IGNORECASE)) # Dummy filter to force state check
+            if loc.first.is_visible():
                 print(f"  Typing password into {selector}...")
-                page.locator(selector).first.click()
-                page.locator(selector).first.fill("")
-                page.locator(selector).first.type(password, delay=80)
+                loc.first.click()
+                page.wait_for_timeout(300)
+                loc.first.fill("")
+                loc.first.type(password, delay=100)
                 p_found = True
                 break
         
         if not p_found:
+            print(f"  Attempting wait for primary password selector...")
             page.wait_for_selector("#password", state="visible", timeout=10000)
             page.locator("#password").first.click()
+            page.wait_for_timeout(300)
             page.locator("#password").first.fill("")
-            page.locator("#password").first.type(password, delay=80)
+            page.locator("#password").first.type(password, delay=100)
             
     except Exception as e:
-        print(f"[{username}] Could not find form fields. State at failure:")
-        page.screenshot(path=f"debug_login_fields_{username}.png")
+        print(f"[{username}] ❌ Login Interaction Failed: {e}")
+        try:
+            page.screenshot(path=f"debug_login_fields_{username}.png")
+        except: pass
         return False
 
     # Small delay to let Angular validation settle
