@@ -197,7 +197,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (timestamp == null) return "";
     try {
       final dt = DateTime.parse(timestamp).toLocal();
-      return "${dt.hour}:${dt.minute.toString().padLeft(2, '0')}";
+      final monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      final month = monthNames[dt.month - 1];
+      final day = dt.day;
+      
+      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? "PM" : "AM";
+      final minute = dt.minute.toString().padLeft(2, '0');
+      
+      return "$month $day, $hour:$minute $ampm";
     } catch (e) {
       return "";
     }
