@@ -511,104 +511,160 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         print("  [OTP/Approve] Checking for interaction prompt (waiting up to 15s)...")
         
         # Check for push approval notification (common in NIC Asia MoBank)
+        # We also check for "Verify Login" text which is the header for NIC Asia's OTP page
         page.wait_for_load_state('networkidle', timeout=15000)
         page_text = page.inner_text('body').lower()
+        
+        is_otp_screen = "verify login" in page_text or "verification code" in page_text
+        if is_otp_screen:
+            print("  [OTP] OTP/Verification screen detected by page text.")
+
         if "approve" in page_text or "notification" in page_text or "mobile app" in page_text:
             print("  [Approve] Mobile app approval prompt detected. Please tap 'Approve' on your MoBank app.")
             print("  [Approve] Waiting up to 60s for approval...")
             try:
-                # Wait for the page to redirect or load the dashboard after approval
                 page.wait_for_load_state('networkidle', timeout=60000)
-            except:
-                pass
+            except: pass
         
         otp_selectors = [
+            ".otp-field__input", "input[placeholder='*']", 
             "input[name*='otp']", "input[id*='otp']", "input[placeholder*='OTP']", 
-            "input[name*='code']", "input[id*='txtOTP']", "input[id*='password']" # Some banks use password field for OTP
+            "input[name*='code']", "input[id*='txtOTP']", "input[placeholder*='Code']"
         ]
         
-        found_otp = False
+        found_otp_field = False
+        target_otp_sel = None
         for otp_sel in otp_selectors:
             try:
-                # NIC Asia and others might redirect or load OTP page slowly
-                if page.locator(otp_sel).is_visible(timeout=5000):
-                    found_otp = True
+                if page.locator(otp_sel).first.is_visible(timeout=5000):
+                    found_otp_field = True
+                    target_otp_sel = otp_sel
                     print(f"  [OTP] OTP field detected ({otp_sel}).")
-                    print(f"  [OTP] OTP required for {config.get('name', 'Bank')} login.")
-                    if account_id:
-                        otp_code = _poll_for_otp(account_id)
-                        if otp_code:
-                            print(f"  [OTP] OTP received: {otp_code}. Submitting...")
-                            page.fill(otp_sel, otp_code)
-                            page.keyboard.press("Enter")
-                            page.wait_for_load_state('networkidle', timeout=30000)
-                            break
-                        else:
-                            print("  [OTP] Failed to get OTP. Login aborted.")
-                            return None
-                    else:
-                        print("  [OTP] account_id not provided. Cannot poll for OTP.")
-                        return None
-            except:
-                continue
+                    break
+            except: continue
 
+        if found_otp_field or is_otp_screen:
+            if not found_otp_field:
+                # Fallback to general input if text matched but selector didn't
+                target_otp_sel = "input:not([type='hidden'])"
+            
+            print(f"  [OTP] OTP required for {config.get('name', 'Bank')} login.")
+            if account_id:
+                otp_code = _poll_for_otp(account_id)
+                if otp_code:
+                    print(f"  [OTP] OTP received: {otp_code}. Entering...")
+                    # For multi-box inputs like NIC Asia, we might need to type slowly
+                    first_input = page.locator(target_otp_sel).first
+                    first_input.click()
+                    page.wait_for_timeout(500)
+                    page.keyboard.type(otp_code, delay=200)
+                    page.wait_for_timeout(1000)
+                    page.keyboard.press("Enter")
+                    
+                    # Some banks need a "Continue" click
+                    try:
+                        page.click("button:has-text('Continue'), button:has-text('Verify')", timeout=5000)
+                    except: pass
+                    
+                    page.wait_for_load_state('networkidle', timeout=30000)
+                else:
+                    print("  [OTP] Failed to get OTP. Login aborted.")
+                    return None
+            else:
+                print("  [OTP] account_id not provided. Cannot poll for OTP.")
+                # We still wait a bit in case they enter it manually
+                page.wait_for_timeout(10000)
+
+        # Final check if we are on the dashboard
         page.wait_for_load_state('networkidle', timeout=30000)
         time.sleep(3) # Wait for dashboard to settle
 
         # Try mapping-specific selectors
-        for sel in config['balance_sel'].split(','):
-            sel = sel.strip()
-            if not sel: continue
-            try:
-                el = page.locator(sel).first
-                if el.is_visible(timeout=5000):
-                    balance = _extract_balance(el.text_content())
-                    if balance is not None:
-                        print(f"  [Balance] Found Balance: Rs. {balance:,.2f}")
-                        return balance
-            except Exception:
-                continue
-
-        # Try finding by text keywords near numbers
-        try:
-            # Look for labels like "Available Balance", "Total Balance", etc.
-            keywords = ["Available Balance", "Total Balance", "Balance", "Account Balance", "Amount"]
-            for kw in keywords:
-                # Find the element containing the keyword
-                labels = page.get_by_text(kw, exact=False).all()
-                for label in labels:
-                    if label.is_visible():
-                        # Look at the parent or next sibling for a number
-                        parent_text = label.locator("xpath=..").inner_text()
-                        balance = _extract_balance(parent_text)
+        # Try specific selectors from config first
+        if config.get("balance_sel"):
+            for sel in config["balance_sel"]:
+                try:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=5000):
+                        text = elem.inner_text()
+                        balance = _extract_balance(text)
                         if balance is not None:
-                            print(f"  [Balance] Found Balance (Keyword '{kw}'): Rs. {balance:,.2f}")
+                            print(f"  [Balance] Found via selector '{sel}': Rs. {balance:,.2f}")
                             return balance
-                        
-                        # Try next sibling
-                        sibling_text = page.evaluate("(el) => el.nextElementSibling ? el.nextElementSibling.innerText : ''", label.element_handle())
-                        balance = _extract_balance(sibling_text)
-                        if balance is not None:
-                             print(f"  [Balance] Found Balance (Sibling of '{kw}'): Rs. {balance:,.2f}")
-                             return balance
-        except:
-            pass
+                except: continue
 
-        # Fallback: Scrape anything that looks like NPR / Rs balance or a currency amount
+        # Keyword based search
+        try:
+            # We look for "Available Balance" FIRST as it's the most accurate
+            prioritized_keywords = ["Available Balance", "Available", "Total Balance", "Balance", "Amount"]
+            for kw in prioritized_keywords:
+                labels = page.get_by_text(kw, exact=True).all()
+                if not labels:
+                     labels = page.get_by_text(kw, exact=False).all()
+                
+                for label in labels:
+                    try:
+                        if label.is_visible():
+                            # Look at the parent or next sibling
+                            parent_text = label.locator("xpath=..").inner_text()
+                            balance = _extract_balance(parent_text)
+                            if balance is not None:
+                                print(f"  [Balance Debug] Found '{kw}' in parent text: '{parent_text.strip()}' -> Rs. {balance:,.2f}")
+                                return balance
+                            
+                            # Try next sibling
+                            sibling_text = page.evaluate("(el) => el.nextElementSibling ? el.nextElementSibling.innerText : ''", label.element_handle())
+                            balance = _extract_balance(sibling_text)
+                            if balance is not None:
+                                 print(f"  [Balance Debug] Found '{kw}' in sibling text: '{sibling_text.strip()}' -> Rs. {balance:,.2f}")
+                                 return balance
+                    except: continue
+        except: pass
+
+        # Fallback: Regex scraper for currency-like strings
+        print("  [Balance Debug] Falling back to regex scraper...")
         content = page.content()
-        # Regex for common balance formats in Nepal (Rs. 1,234.56 or 1,234.56 NPR)
-        matches = re.findall(r'(?:Rs\.?|NPR|Amount)\s*([\d,]+(?:\.\d+)?)', content)
+        clean_content = re.sub(r'<script.*?>.*?</script>', '', content, flags=re.DOTALL)
+        clean_content = re.sub(r'<style.*?>.*?</style>', '', clean_content, flags=re.DOTALL)
+        
+        # Look for Rs. X,XXX.XX or NPR X,XXX.XX
+        matches = re.findall(r'(?:Rs\.?|NPR|Amount)\s*([\d,]+\.\d{2})', clean_content)
         if not matches:
-             # Look for any large number with 2 decimal places (likely a currency amount)
-             matches = re.findall(r'[\d,]+\.\d{2}', content)
+             # Look for any digit with commas and 2 decimal places
+             matches = re.findall(r'[\d,]+\.\d{2}', clean_content)
 
+        print(f"  [Balance Debug] Found {len(matches)} potential currency matches: {matches}")
+        
+        valid_balances = []
         for m in matches:
-            val = float(m.replace(',', ''))
-            if val > 100 and val < 10000000: # Threshold to avoid tiny IDs or account numbers
-                print(f"  [Balance] Found Balance (Regex Fallback): Rs. {val:,.2f}")
-                return val
+            try:
+                val = float(m.replace(',', ''))
+                # Threshold to avoid small IDs or huge account numbers
+                if 5.0 <= val <= 5000000.0:
+                    context_match = re.search(r'(.{0,40})' + re.escape(m) + r'(.{0,40})', clean_content)
+                    context_text = context_match.group(0).replace('\n', ' ') if context_match else "No context"
+                    print(f"  [Balance Debug] Candidate: {m} (Context: ...{context_text}...)")
+                    valid_balances.append(val)
+            except: pass
+
+        if valid_balances:
+            # Usually the largest currency amount on a dashboard is the balance if multiple exist
+            # but for NIC Asia, it's often the first one under 'Available'
+            return valid_balances[0]
 
     except Exception as e:
         print(f"  [Error] Balance check failed for {config['name']}: {e}")
+    finally:
+        # ALWAYS take a screenshot of the dashboard for verification
+        try:
+            import os # Added import for os
+            import time # Added import for time
+            shots_dir = "d:\\ipoautomation\\screenshots"
+            if not os.path.exists(shots_dir): os.makedirs(shots_dir)
+            t_stamp = int(time.time())
+            path = os.path.join(shots_dir, f"dashboard_{config.get('name','bank')}_{t_stamp}.png")
+            page.screenshot(path=path, full_page=True)
+            print(f"  [Debug] Dashboard screenshot saved to: {path}")
+        except: pass
 
     return None
