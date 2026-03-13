@@ -145,11 +145,13 @@ def run_automation():
                             bank_page.close()
 
                         if balance is not None:
+                            print(f"  💰 Found Balance: Rs.{balance:,.2f}")
                             status = "Low Balance" if balance < MIN_BALANCE else "Success"
                             remark = f"Balance: Rs.{balance:.2f}"
                             if balance < MIN_BALANCE:
                                 remark += f" (min Rs.{MIN_BALANCE:.2f})"
                         else:
+                            print(f"  ❌ Failed to retrieve balance for {acc['bank']}.")
                             status = "Failed"
                             remark = "Failed to retrieve balance"
 
