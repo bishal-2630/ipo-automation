@@ -15,10 +15,11 @@ BANK_CONFIGS: dict[str, dict] = {
     "nic_asia": {
         "name": "NIC Asia Bank",
         "url": "https://omni.nicasiabank.com/sign-in",
-        "user_sel": "#nd-input-1, input[placeholder='Enter Mobile Number']",
-        "pass_sel": "#nd-input-0, input[placeholder='Enter Password'], input[type='password']",
-        "submit_sel": "button.nd-button--primary, button:has-text('Log In')",
-        "balance_sel": "span.balance-amount, .available-balance, .amt-balance, .nd-balance-value, .total-balance, [class*='balance-amount']",
+        "user_sel": ["#nd-input-1", "input[placeholder='Enter Mobile Number']"],
+        "pass_sel": ["#nd-input-0", "input[placeholder='Enter Password']", "input[type='password']"],
+        "submit_sel": ["button.nd-button--primary", "button:has-text('Log In')"],
+        "dashboard_sel": ".nd-dashboard, .nd-account-card, .available-balance",
+        "balance_sel": ["span.balance-amount", ".available-balance", ".amt-balance", ".nd-balance-value", ".total-balance"],
     },
     "nabil": {
         "name": "Nabil Bank",
@@ -347,6 +348,7 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
     print(f"  [OTP] Waiting up to {timeout_mins} minutes for OTP relay (Account ID: {account_id})...")
     start_time = time.time()
     
+    # We increase the polling frequency at the start and slow down
     while time.time() - start_time < timeout_mins * 60:
         try:
             # Plan A: Use REST API (Vercel/Cloud)
@@ -515,20 +517,25 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         page.wait_for_load_state('networkidle', timeout=15000)
         page_text = page.inner_text('body').lower()
         
-        is_otp_screen = "verify login" in page_text or "verification code" in page_text
+        is_otp_screen = "verify login" in page_text or "verification code" in page_text or "enter otp" in page_text or "enter code" in page_text
         if is_otp_screen:
             print("  [OTP] OTP/Verification screen detected by page text.")
 
         if "approve" in page_text or "notification" in page_text or "mobile app" in page_text:
             print("  [Approve] Mobile app approval prompt detected. Please tap 'Approve' on your MoBank app.")
-            print("  [Approve] Waiting up to 60s for approval...")
+            print("  [Approve] Waiting up to 90s for approval...")
             try:
-                page.wait_for_load_state('networkidle', timeout=60000)
-            except: pass
+                # Wait for navigation or dashboard to appear after approval
+                dash_sel = config.get("dashboard_sel", ".dashboard")
+                page.wait_for_selector(dash_sel, state="visible", timeout=90000)
+                print("  [Approve] Dashboard detected after approval!")
+            except: 
+                print("  [Approve] Dashboard not detected after 90s. Checking for OTP field...")
+                pass
         
         otp_selectors = [
+            "#otp", "input[name*='otp']", "input[id*='otp']", "input[placeholder*='OTP']",
             ".otp-field__input", "input[placeholder='*']", 
-            "input[name*='otp']", "input[id*='otp']", "input[placeholder*='OTP']", 
             "input[name*='code']", "input[id*='txtOTP']", "input[placeholder*='Code']"
         ]
         
@@ -576,13 +583,26 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
                 page.wait_for_timeout(10000)
 
         # Final check if we are on the dashboard
-        page.wait_for_load_state('networkidle', timeout=30000)
-        time.sleep(3) # Wait for dashboard to settle
+        # Wait for a "Dashboard" specific element before scraping balance
+        dashboard_sel = config.get("dashboard_sel", ".dashboard, .account-summary, .available-balance")
+        print(f"  [Dashboard] Waiting for dashboard ({dashboard_sel})...")
+        try:
+            if isinstance(dashboard_sel, list):
+                page.wait_for_selector(", ".join(dashboard_sel), state="visible", timeout=30000)
+            else:
+                page.wait_for_selector(dashboard_sel, state="visible", timeout=30000)
+            time.sleep(3) # Wait for dashboard to settle
+        except:
+             print("  ⚠️ Dashboard not detected via selector. Proceeding with fallback scraping...")
 
         # Try mapping-specific selectors
-        # Try specific selectors from config first
-        if config.get("balance_sel"):
-            for sel in config["balance_sel"]:
+        balance_sels = config.get("balance_sel")
+        if balance_sels:
+            # Handle both list and comma-separated string
+            if isinstance(balance_sels, str):
+                balance_sels = [s.strip() for s in balance_sels.split(",")]
+            
+            for sel in balance_sels:
                 try:
                     elem = page.locator(sel).first
                     if elem.is_visible(timeout=5000):
@@ -596,6 +616,7 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         # Keyword based search
         try:
             # We look for "Available Balance" FIRST as it's the most accurate
+            # We also ensure the page is actually showing dashboard-like text
             prioritized_keywords = ["Available Balance", "Available", "Total Balance", "Balance", "Amount"]
             for kw in prioritized_keywords:
                 labels = page.get_by_text(kw, exact=True).all()

