@@ -6,7 +6,7 @@ Config-driven multi-bank balance checker for Nepali internet banking portals.
 
 from playwright.sync_api import Page
 import re, time, requests, os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # -------------------------------------------------------------------
 # Bank registry (Comprehensive mapping for Class A & B banks)
@@ -348,15 +348,14 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
         return None
 
     print(f"  [OTP] Waiting up to {timeout_mins} minutes for OTP relay (Account ID: {account_id})...")
-    
-    # We only want OTPs created AFTER the polling started
-    poll_start_time = datetime.now(timezone.utc)
-    start_time = time.time()
+        # Relax the start time (allow OTPs from 2 mins ago to handle slow navigation/race conditions)
+    poll_start_time = datetime.now(timezone.utc) - timedelta(minutes=2)
+    start_time_unix = time.time()
     
     # We increase the polling frequency at the start and slow down
-    while time.time() - start_time < timeout_mins * 60:
+    while time.time() - start_time_unix < timeout_mins * 60:
         try:
-            # Plan A: Use REST API (Vercel/Cloud)
+            # Plan A: Use REST API (Best for Cloud/Vercel)
             if token:
                 response = requests.get(
                     f"{api_base}/bank-otps/?is_used=false",
@@ -365,32 +364,34 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                 )
                 if response.status_code == 200:
                     otps = response.json()
-                    if otps:
-                        latest_otp = otps[0]
-                        # Parse Django REST ISO format (e.g., 2026-03-15T15:00:00Z)
+                    # Filter for our account or orphaned background codes (null account_id)
+                    for otp in otps:
+                        created_at_dt = None
                         try:
-                            created_at_str = latest_otp.get('created_at', '')
-                            created_at_dt = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                        except:
-                            created_at_dt = None
+                            c_str = otp.get('created_at', '')
+                            created_at_dt = datetime.fromisoformat(c_str.replace('Z', '+00:00'))
+                        except: pass
 
-                        if created_at_dt and created_at_dt >= poll_start_time:
-                            print(f"  [OTP] Found code {latest_otp['otp_code']} (Created: {created_at_str})")
-                            requests.patch(
-                                f"{api_base}/bank-otps/{latest_otp['id']}/",
-                                json={"is_used": True},
-                                headers={"Authorization": f"Token {token}"}
-                            )
-                            return latest_otp['otp_code']
+                        if not created_at_dt or created_at_dt >= poll_start_time:
+                            # Match if correct account OR orphaned background relay (null)
+                            if otp.get('account_id') in (account_id, None):
+                                print(f"  [OTP] Found code {otp['otp_code']} (Created: {otp.get('created_at')})")
+                                requests.patch(
+                                    f"{api_base}/bank-otps/{otp['id']}/",
+                                    json={"is_used": True},
+                                    headers={"Authorization": f"Token {token}"}
+                                )
+                                return otp['otp_code']
             
-            # Plan B: Direct Database Query (Local/Heroku/Server)
-            elif db_url:
+            # Plan B: Direct Database Query (Fastest for local/Heroku)
+            if db_url:
                 import psycopg2
                 conn = psycopg2.connect(db_url)
                 cur = conn.cursor()
+                # Include account_id = NULL but ONLY for the same user (catch orphaned background relays)
                 cur.execute(
                     "SELECT otp_code, id, created_at FROM automation_bankotp "
-                    "WHERE (account_id = %s OR user_id = (SELECT owner_id FROM automation_account WHERE id = %s)) "
+                    "WHERE (account_id = %s OR (account_id IS NULL AND user_id = (SELECT owner_id FROM automation_account WHERE id = %s))) "
                     "AND is_used = false AND created_at >= %s "
                     "ORDER BY created_at DESC LIMIT 1", 
                     (account_id, account_id, poll_start_time)
@@ -398,12 +399,15 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                 res = cur.fetchone()
                 if res:
                     otp_code, otp_id, created_at = res
-                    print(f"  [OTP] Found code {otp_code} (Created: {created_at})")
+                    print(f"  [OTP] Found code {otp_code} in DB (ID: {otp_id}, Created: {created_at})")
                     cur.execute("UPDATE automation_bankotp SET is_used = true WHERE id = %s", (otp_id,))
                     conn.commit()
+                    cur.close()
                     conn.close()
                     return otp_code
+                cur.close()
                 conn.close()
+
                 
         except Exception as e:
             print(f"  ⚠️  Error polling for OTP: {e}")

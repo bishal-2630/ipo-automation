@@ -37,12 +37,12 @@ class OtpRelayService {
     final address = message.address ?? "";
     print("Incoming SMS from $address: $body");
 
-    // Match 6 digit OTP
+    // Match 6 digit OTP (Broaden to match any 6 digits if it looks like a code)
     final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
     
-    // Check keywords in body OR sender address
-    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify', caseSensitive: false)) ||
-                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|6202', caseSensitive: false));
+    // Check keywords in body OR sender address (Loosened significantly)
+    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify|Applied|MeroShare|CASBA', caseSensitive: false)) ||
+                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|620|320', caseSensitive: false));
     
     if (otpMatch != null && isBankingSms) {
       final otp = otpMatch.group(0)!;
@@ -84,27 +84,21 @@ void _backgroundMessageHandler(SmsMessage message) async {
   
   _staticLogRelayEvent(address, "BG_WAKE: Intercepted SMS");
 
-  // Show a notification immediately so the user knows the app is alive
-  await _showDebugNotification("SMS Intercepted", "From: $address");
-
   final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
-  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify', caseSensitive: false)) ||
-                      address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|6202', caseSensitive: false));
+  // Loosened filters (NIC Asia, MeroShare, CASBA keywords + broad sender matching)
+  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify|Applied|MeroShare|CASBA', caseSensitive: false)) ||
+                      address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|620|320', caseSensitive: false));
 
   if (otpMatch != null && isBankingSms) {
     final otp = otpMatch.group(0)!;
     _staticLogRelayEvent(address, "BG_MATCH: OTP Found ($otp)");
     
-    await _showDebugNotification("OTP Detected ($otp)", "Relaying to background...");
-
     final apiService = ApiService();
     try {
       await apiService.relayOtp(null, otp);
       _staticLogRelayEvent(address, "BG_SUCCESS: Relayed $otp");
-      await _showDebugNotification("OTP Relayed Successfully", "Code $otp has been sent to backend.");
     } catch (e) {
       _staticLogRelayEvent(address, "BG_API_ERROR: $e");
-      await _showDebugNotification("Relay Failed", "Error: $e");
     }
   } else if (otpMatch != null) {
      _staticLogRelayEvent(address, "BG_REJECT: OTP found but filter mismatch.");
