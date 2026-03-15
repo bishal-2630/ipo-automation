@@ -230,18 +230,20 @@ class ApiService {
     );
   }
 
-  Future<void> relayOtp(String meroshareUser, String otpCode) async {
+  Future<void> relayOtp(String? meroshareUser, String otpCode) async {
     final token = await getToken();
+    final Map<String, dynamic> body = {'otp_code': otpCode};
+    if (meroshareUser != null) {
+      body['meroshare_user'] = meroshareUser;
+    }
+    
     final response = await http.post(
       Uri.parse('$baseUrl/bank-otps/'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Token $token'
       },
-      body: json.encode({
-        'meroshare_user': meroshareUser,
-        'otp_code': otpCode,
-      }),
+      body: json.encode(body),
     );
     if (response.statusCode != 201) {
       throw Exception('Failed to relay OTP: ${response.body}');

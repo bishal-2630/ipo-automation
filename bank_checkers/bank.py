@@ -356,7 +356,7 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
             # Plan A: Use REST API (Vercel/Cloud)
             if token:
                 response = requests.get(
-                    f"{api_base}/bank-otps/?account={account_id}&is_used=false",
+                    f"{api_base}/bank-otps/?is_used=false",
                     headers={"Authorization": f"Token {token}"},
                     timeout=10
                 )
@@ -381,9 +381,10 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                 cur = conn.cursor()
                 cur.execute(
                     "SELECT otp_code, id, created_at FROM automation_bankotp "
-                    "WHERE account_id = %s AND is_used = false "
+                    "WHERE (account_id = %s OR user_id = (SELECT owner_id FROM automation_account WHERE id = %s)) "
+                    "AND is_used = false "
                     "ORDER BY created_at DESC LIMIT 1", 
-                    (account_id,)
+                    (account_id, account_id)
                 )
                 res = cur.fetchone()
                 if res:

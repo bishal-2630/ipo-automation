@@ -84,7 +84,7 @@ class BankOTPViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = BankOTP.objects.filter(account__owner=self.request.user)
+        queryset = BankOTP.objects.filter(user=self.request.user)
         
         # Manual filtering for account and is_used
         account_id = self.request.query_params.get('account')
@@ -98,8 +98,11 @@ class BankOTPViewSet(viewsets.ModelViewSet):
             
         return queryset.order_by('-created_at')
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
     def create(self, request, *args, **kwargs):
-        # We allow lookup by account ID or meroshare_user
+        # We allow lookup by account ID, meroshare_user, or no account at all (User Pool)
         account_id = request.data.get('account')
         meroshare_user = request.data.get('meroshare_user')
         otp_code = request.data.get('otp_code')
@@ -107,18 +110,18 @@ class BankOTPViewSet(viewsets.ModelViewSet):
         if not otp_code:
             return Response({'error': 'otp_code is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        account = None
         try:
             if account_id:
                 account = Account.objects.get(id=account_id, owner=request.user)
             elif meroshare_user:
                 account = Account.objects.get(meroshare_user=meroshare_user, owner=request.user)
-            else:
-                return Response({'error': 'account or meroshare_user is required'}, status=status.HTTP_400_BAD_REQUEST)
         except Account.DoesNotExist:
-            return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+            pass # We'll allow it to be linked to just the user
 
         # Create new OTP entry
         otp_obj = BankOTP.objects.create(
+            user=request.user,
             account=account,
             otp_code=otp_code
         )

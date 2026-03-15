@@ -119,14 +119,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
           final allAccounts = snapshot.data ?? [];
 
-          if (allAccounts.isNotEmpty) {
-            // Automatically set the first account as primary for OTP relay if not set
-            SharedPreferences.getInstance().then((prefs) {
-              if (prefs.getString('primary_meroshare_user') == null) {
-                prefs.setString('primary_meroshare_user', allAccounts.first.user);
-              }
-            });
-          }
 
           if (allAccounts.isEmpty) {
             return _buildEmptyState("No accounts", "Tap + to add MeroShare account");
@@ -274,14 +266,8 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () {
           // Normal tap could show details
         },
-        onLongPress: () async {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('primary_meroshare_user', acc.user);
-          setState(() {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Relay set to ${acc.user}"), backgroundColor: Colors.green),
-            );
-          });
+        onLongPress: () {
+          // No longer needed for OTP relay
         },
         trailing: IconButton(
           icon: Icon(Icons.edit, color: Colors.deepPurple),

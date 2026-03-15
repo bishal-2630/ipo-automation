@@ -82,5 +82,5 @@ class ApplicationLogSerializer(serializers.ModelSerializer):
 class BankOTPSerializer(serializers.ModelSerializer):
     class Meta:
         model = BankOTP
-        fields = ['id', 'account', 'otp_code', 'is_used', 'created_at']
-        read_only_fields = ['is_used', 'created_at']
+        fields = ['id', 'user', 'account', 'otp_code', 'is_used', 'created_at']
+        read_only_fields = ['user', 'is_used', 'created_at']

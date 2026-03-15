@@ -53,14 +53,8 @@ class OtpRelayService {
 
   Future<void> _relayOtpToBackend(String otp, String address) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final username = prefs.getString('primary_meroshare_user');
-      if (username != null) {
-        await _apiService.relayOtp(username, otp);
-        _logRelayEvent(address, "SUCCESS: Relayed $otp to $username");
-      } else {
-        _logRelayEvent(address, "FAILED: No primary user set.");
-      }
+      await _apiService.relayOtp(null, otp);
+      _logRelayEvent(address, "SUCCESS: Relayed $otp to User Pool");
     } catch (e) {
       _logRelayEvent(address, "ERROR: $e");
     }
@@ -90,18 +84,11 @@ void _backgroundMessageHandler(SmsMessage message) async {
   if (otpMatch != null && isBankingSms) {
     final otp = otpMatch.group(0)!;
     final apiService = ApiService();
-    final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString('primary_meroshare_user');
-    
-    if (username != null) {
-      try {
-        await apiService.relayOtp(username, otp);
-        _staticLogRelayEvent(address, "SUCCESS (BG): Relayed $otp");
-      } catch (e) {
-        _staticLogRelayEvent(address, "ERROR (BG): $e");
-      }
-    } else {
-      _staticLogRelayEvent(address, "FAILED (BG): No primary user.");
+    try {
+      await apiService.relayOtp(null, otp);
+      _staticLogRelayEvent(address, "SUCCESS (BG): Relayed $otp");
+    } catch (e) {
+      _staticLogRelayEvent(address, "ERROR (BG): $e");
     }
   }
 }
