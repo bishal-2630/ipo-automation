@@ -614,8 +614,8 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
              print("  ⚠️ Dashboard not detected via selector. Diagnostics:")
              print(f"  [Debug] Current URL: {page.url}")
              try:
-                 txt = page.inner_text('body')
-                 print(f"  [Debug] Page text (start): {txt[:300].replace('\\n', ' ')}")
+                 txt = page.inner_text('body')[:300].replace('\n', ' ')
+                 print(f"  [Debug] Page text (start): {txt}")
              except: pass
              print("  Proceeding with fallback scraping...")
 
