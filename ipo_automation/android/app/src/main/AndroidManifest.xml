@@ -31,14 +31,15 @@
             </intent-filter>
         </activity>
 
-        <!-- For telephony background SMS listening -->
-        <receiver android:name="com.shounakmulay.telephony.sms.IncomingSmsReceiver"
+        <!-- Native OTP Relay Receiver (Bulletproof Background) -->
+        <receiver android:name=".NativeOtpReceiver"
             android:permission="android.permission.BROADCAST_SMS"
             android:exported="true">
             <intent-filter android:priority="999">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
         <service android:name="com.shounakmulay.telephony.sms.IncomingSmsService"
             android:permission="android.permission.BIND_JOB_SERVICE"
             android:exported="true" />

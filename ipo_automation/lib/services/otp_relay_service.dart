@@ -25,7 +25,6 @@ class OtpRelayService {
         onNewMessage: (SmsMessage message) {
           _handleIncomingSms(message);
         },
-        onBackgroundMessage: _backgroundMessageHandler,
       );
     } else {
       print("SMS Permissions DENIED. OTP relay will not function.");
