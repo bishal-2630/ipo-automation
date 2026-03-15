@@ -1,9 +1,12 @@
 import os
 import psycopg2
 import datetime
+import time
+import re
 from playwright.sync_api import sync_playwright
 from main import login, apply_ipo, handle_password_reset
 from bank_checkers.bank import check_balance
+from expiry_handler import handle_expired_account
 
 # ── Firebase setup ──────────────────────────────────────────────────
 import firebase_admin
@@ -18,10 +21,10 @@ def _init_firebase():
             cred = credentials.Certificate(cred_path)
         else:
             # Fallback: load from base64-encoded env variable (used on GitHub Actions)
-            import base64, json, tempfile
+            import base64, json
             b64 = os.environ.get("FIREBASE_CREDENTIALS_B64", "")
             if not b64:
-                print("  ⚠️  Firebase credentials not found (no file and no FIREBASE_CREDENTIALS_B64 env var). Skipping notifications.")
+                print("  ⚠️  Firebase credentials not found. Skipping notifications.")
                 return False
             cred_json = json.loads(base64.b64decode(b64).decode())
             cred = credentials.Certificate(cred_json)
@@ -30,7 +33,6 @@ def _init_firebase():
 
 def send_push_notification(fcm_tokens: list, title: str, body: str):
     if not fcm_tokens:
-        print("  No FCM tokens – skipping notification.")
         return
     if not _init_firebase():
         return
@@ -49,25 +51,19 @@ DB_URL = os.environ.get("DATABASE_URL")
 
 # ── Encryption ─────────────────────────────────────────────────────
 from cryptography.fernet import Fernet
-
 _ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "").encode()
 
 def decrypt(token: str) -> str:
     if not token:
         return token
     if not _ENCRYPTION_KEY:
-        if token.startswith('gAAAAA'):
-            print("  ⚠️  WARNING: ENCRYPTION_KEY is not set, but token looks encrypted! MeroShare login will likely fail.")
         return token
-    
-    # If the token doesn't look encrypted (Fernet tokens start with gAAAAA), return as-is
     if not token.startswith('gAAAAA'):
         return token
-
     try:
         return Fernet(_ENCRYPTION_KEY).decrypt(token.encode()).decode()
     except Exception as e:
-        print(f"  ⚠️  WARNING: Decryption failed for token starting with '{token[:10]}...' (Key mismatch?): {e}")
+        print(f"  ⚠️  Decryption failed: {e}")
         return token
 
 # ── Main automation ─────────────────────────────────────────────────
@@ -78,10 +74,9 @@ def run_automation():
         return
 
     try:
+        # 1. Fetch active accounts with a short-lived connection
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
-
-        # 1. Fetch active accounts
         cur.execute("""
             SELECT a.id, a.meroshare_user, a.meroshare_pass, a.dp_name,
                    a.crn, a.tpin, a.bank_name, a.kitta, a.owner_id,
@@ -92,6 +87,8 @@ def run_automation():
         """)
         columns = [desc[0] for desc in cur.description]
         accounts = [dict(zip(columns, row)) for row in cur.fetchall()]
+        cur.close()
+        conn.close()
 
         if not accounts:
             print("No active accounts found.")
@@ -102,33 +99,25 @@ def run_automation():
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-infobars',
-                    '--no-sandbox',
-                    '--window-size=1280,720'
-                ]
+                args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
             )
-            
-            # Use stealth context to bypass Anti-Bot
             context = browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720},
                 permissions=['geolocation'],
-                geolocation={'latitude': 27.7172, 'longitude': 85.3240},
-                extra_http_headers={ "Accept-Language": "en-US,en;q=0.9" }
+                geolocation={'latitude': 27.7172, 'longitude': 85.3240}
             )
 
             for acc in accounts:
-                print(f"\n{'='*50}")
-                print(f"Processing: {acc['meroshare_user']}")
+                print(f"\n{'='*50}\nProcessing: {acc['meroshare_user']}")
                 page = context.new_page()
                 status = "Error"
                 remark = "Unknown error"
-                ipo_name = "Auto-Check"  # Always initialise before try/finally
+                ipo_name = "Auto-Check"
 
                 try:
-                    # 2. Bank balance check (if bank credentials are linked)
+                    # 2. Bank balance check
+                    balance = None
                     if acc.get('bank') and acc.get('phone_number') and acc.get('bank_password'):
                         bank_page = context.new_page()
                         try:
@@ -139,52 +128,41 @@ def run_automation():
                                 page=bank_page,
                                 account_id=acc['id'],
                             )
-                        except Exception as bank_err:
-                            print(f"  ⚠️  Bank balance check raised exception: {bank_err}. Proceeding with IPO.")
-                            balance = None
+                        except Exception as e:
+                            print(f"  ❌ Bank Check Exception: {e}")
                         finally:
                             bank_page.close()
 
                         if balance is not None:
                             print(f"  💰 Found Balance: Rs.{balance:,.2f}")
-                            status = "Low Balance" if balance < MIN_BALANCE else "Success"
-                            remark = f"Balance: Rs.{balance:.2f}"
                             if balance < MIN_BALANCE:
-                                remark += f" (min Rs.{MIN_BALANCE:.2f})"
+                                status = "Low Balance"
+                                remark = f"Balance: Rs.{balance:.2f} (min Rs.{MIN_BALANCE:.2f})"
+                                print(f"  ⚠️  Low balance — skipping IPO.")
+                                
+                                # Quick notify for low balance
+                                try:
+                                    conn = psycopg2.connect(DB_URL)
+                                    cur = conn.cursor()
+                                    if acc.get('owner_id'):
+                                        cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
+                                        tokens = [row[0] for row in cur.fetchall()]
+                                        send_push_notification(tokens, acc['meroshare_user'], f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up.")
+                                    cur.close()
+                                    conn.close()
+                                except: pass
+                                
+                                page.close()
+                                continue
+                            else:
+                                status = "Success"
+                                remark = f"Balance: Rs.{balance:.2f}"
                         else:
-                            print(f"  ❌ Failed to retrieve balance for {acc['bank']}.")
+                            print(f"  ❌ Failed to retrieve balance.")
                             status = "Failed"
                             remark = "Failed to retrieve balance"
 
-                        # Log to database
-                        cur.execute("""
-                            INSERT INTO automation_applicationlog
-                                (account_id, company_name, status, remark, timestamp, is_read)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                        """, (acc['id'], "Balance Check", status, remark,
-                                datetime.datetime.now(datetime.timezone.utc), False))
-                        conn.commit()
-
-                        if balance is not None and balance < MIN_BALANCE:
-                            print(f"  ⚠️  Balance Rs.{balance:.2f} < Rs.{MIN_BALANCE:.2f} — skipping IPO.")
-
-                            # Notify account holder
-                            if acc.get('owner_id'):
-                                cur.execute(
-                                    "SELECT token FROM automation_fcmtoken WHERE user_id = %s",
-                                    (acc['owner_id'],)
-                                )
-                                tokens = [row[0] for row in cur.fetchall()]
-                                send_push_notification(
-                                    tokens,
-                                    acc['meroshare_user'],
-                                    f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up to apply for IPO.",
-                                )
-
-                            page.close()
-                            continue
-
-                    # 3. Apply IPO via MeroShare
+                    # 3. MeroShare IPO Application
                     account_data = {
                         'MEROSHARE_USER': acc['meroshare_user'],
                         'MEROSHARE_PASS': decrypt(acc['meroshare_pass']),
@@ -196,12 +174,7 @@ def run_automation():
                     }
 
                     page.goto("https://meroshare.cdsc.com.np", timeout=60000)
-                    login_result = login(
-                        page,
-                        account_data['MEROSHARE_USER'],
-                        account_data['MEROSHARE_PASS'],
-                        account_data['DP_NAME'],
-                    )
+                    login_result = login(page, account_data['MEROSHARE_USER'], account_data['MEROSHARE_PASS'], account_data['DP_NAME'])
 
                     if login_result is True:
                         print(f"  ✅ Login OK. Applying IPO...")
@@ -209,86 +182,53 @@ def run_automation():
                         if success:
                             status = "Success"
                             ipo_name = result_detail
-                            remark = f"{ipo_name} ipo has been applied successfully."
+                            remark = f"{ipo_name} applied successfully."
                         else:
                             status = "Failed"
                             remark = result_detail
                     elif login_result == "EXPIRED":
-                        print(f"  ⚠️  Password Expired. Attempting automatic reset...")
                         if handle_password_reset(page, account_data):
-                            print(f"  ✅ Password successfully reset and logged in.")
+                            status = "Success"
                             success, result_detail = apply_ipo(page, account_data)
-                            if success:
-                                status = "Success"
-                                ipo_name = result_detail
-                                remark = f"{ipo_name} (after password reset) ipo has been applied successfully."
-                            else:
-                                status = "Failed"
-                                remark = result_detail
-                        else:
-                            print(f"  ❌ Password reset failed.")
-                            status = "Failed"
-                            remark = "Password expired and automatic reset failed."
+                            ipo_name = result_detail if success else "Auto-Check"
+                            remark = f"Applied after password reset" if success else result_detail
                     else:
-                        print(f"  ❌ Login failed: {login_result}")
                         status = "Failed"
                         remark = f"Login failed: {login_result}"
 
                 except Exception as e:
-                    print(f"  ❌ Exception: {e}")
-                    status = "Error"
+                    print(f"  ❌ Inner Exception: {e}")
                     remark = str(e)
-
                 finally:
-                    # 4. Write log and send notification — wrapped so a DB error here
-                    #    does NOT prevent the next account from being processed.
+                    # 4. Final Logging and Notification (Fresh connection)
                     try:
+                        conn = psycopg2.connect(DB_URL)
+                        cur = conn.cursor()
                         cur.execute("""
                             INSERT INTO automation_applicationlog
                                 (account_id, company_name, status, remark, timestamp, is_read)
                             VALUES (%s, %s, %s, %s, %s, %s)
-                        """, (acc['id'], ipo_name, status, remark,
-                              datetime.datetime.now(datetime.timezone.utc), False))
+                        """, (acc['id'], ipo_name, status, remark, datetime.datetime.now(datetime.timezone.utc), False))
                         conn.commit()
-                    except Exception as db_err:
-                        print(f"  ⚠️  DB log error for {acc['meroshare_user']}: {db_err}")
-                        try:
-                            conn.rollback()
-                        except Exception:
-                            pass
-
-                    try:
-                        if acc.get('owner_id'):
-                            cur.execute(
-                                "SELECT token FROM automation_fcmtoken WHERE user_id = %s",
-                                (acc['owner_id'],)
-                            )
+                        
+                        if acc.get('owner_id') and status != "Error" and "No ordinary shares" not in remark:
+                            cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                             tokens = [row[0] for row in cur.fetchall()]
-                            if status == "Success":
-                                notif_title = acc['meroshare_user']
-                                notif_body = f"✅ Success: {ipo_name} applied successfully."
-                                send_push_notification(tokens, notif_title, notif_body)
-                            elif remark != "No ordinary shares found":
-                                notif_title = acc['meroshare_user']
-                                notif_body = f"⚠️ {status}: {remark}"
-                                send_push_notification(tokens, notif_title, notif_body)
-                    except Exception as notif_err:
-                        print(f"  ⚠️  Notification error for {acc['meroshare_user']}: {notif_err}")
-
-                    try:
-                        page.close()
-                    except Exception:
-                        pass
+                            send_push_notification(tokens, acc['meroshare_user'], f"{'✅' if status=='Success' else '⚠️'} {status}: {remark}")
+                        
+                        cur.close()
+                        conn.close()
+                    except Exception as fatal:
+                        print(f"  ⚠️  Fatal Logging Error: {fatal}")
+                    
+                    try: page.close()
+                    except: pass
 
             browser.close()
-
-        cur.close()
-        conn.close()
         print("\nAutomation run completed.")
 
     except Exception as e:
-        print(f"DB Error: {e}")
-
+        print(f"Global Error: {e}")
 
 if __name__ == "__main__":
     run_automation()

@@ -712,8 +712,10 @@ def apply_ipo(page, account):
     """
     username = account['MEROSHARE_USER']
     print(f"[{username}] Navigating to My ASBA...")
-    page.wait_for_selector(".nav-link:has-text('My ASBA')")
-    page.click(".nav-link:has-text('My ASBA')")
+    asba_selectors = [".nav-link:has-text('My ASBA')", "a:has-text('My ASBA')", ".ms-icon-my-asba", "[routerlink='/asba']"]
+    target_asba = ", ".join(asba_selectors)
+    page.wait_for_selector(target_asba, state="visible", timeout=30000)
+    page.click(target_asba)
 
     try:
         page.wait_for_selector("a:has-text('Apply for Issue')", timeout=10000)
