@@ -470,42 +470,54 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         # Angular-aware login: wait explicitly for field to be interactive, then click and type
         print(f"  [Login] Waiting for username field to be visible and interactable...")
         try:
-            page.wait_for_selector(user_sel, state="visible", timeout=30000)
+            # Handle list or string for wait_for_selector
+            target_user = ", ".join(user_sel) if isinstance(user_sel, list) else user_sel
+            page.wait_for_selector(target_user, state="visible", timeout=30000)
         except Exception as e:
             print(f"  ❌ Username field never appeared: {e}")
             return None
 
         print(f"  [Login] Clicking and typing phone number...")
-        page.locator(user_sel).first.click()
+        user_locator = page.locator(", ".join(user_sel) if isinstance(user_sel, list) else user_sel).first
+        user_locator.click()
         page.wait_for_timeout(500)
-        page.locator(user_sel).first.fill("")
-        page.locator(user_sel).first.type(phone_number, delay=80)
+        user_locator.fill("")
+        user_locator.type(phone_number, delay=80)
         page.wait_for_timeout(1000)
 
         # If password field is not visible, we might need to click 'Proceed' first
-        if not page.locator(pass_sel).is_visible():
+        target_pass = ", ".join(pass_sel) if isinstance(pass_sel, list) else pass_sel
+        if not page.locator(target_pass).first.is_visible():
             proceed_sel = config.get('proceed_sel') if config else None
-            if proceed_sel and page.locator(proceed_sel).is_visible():
+            # proceed_sel can be a list too
+            target_proceed = ", ".join(proceed_sel) if isinstance(proceed_sel, list) else proceed_sel
+            
+            if target_proceed and page.locator(target_proceed).first.is_visible():
                 print("  [Step] Clicking 'Proceed' for multi-step login...")
-                page.click(proceed_sel)
+                page.locator(target_proceed).first.click()
                 page.wait_for_timeout(2000)
-            elif submit_sel and page.locator(submit_sel).is_visible():
-                 print("  [Step] Clicking 'Submit/Proceed' for multi-step login...")
-                 page.click(submit_sel)
-                 page.wait_for_timeout(2000)
+            elif submit_sel:
+                target_submit = ", ".join(submit_sel) if isinstance(submit_sel, list) else submit_sel
+                if page.locator(target_submit).first.is_visible():
+                    print("  [Step] Clicking 'Submit/Proceed' for multi-step login...")
+                    page.locator(target_submit).first.click()
+                    page.wait_for_timeout(2000)
 
-        page.wait_for_selector(pass_sel, state="visible", timeout=15000)
+        page.wait_for_selector(target_pass, state="visible", timeout=15000)
         print(f"  [Login] Clicking and typing password...")
-        page.locator(pass_sel).first.click()
+        pass_locator = page.locator(target_pass).first
+        pass_locator.click()
         page.wait_for_timeout(500)
-        page.locator(pass_sel).first.fill("")
-        page.locator(pass_sel).first.type(password, delay=80)
+        pass_locator.fill("")
+        pass_locator.type(password, delay=80)
         page.wait_for_timeout(1000)
         
         print("  [Login] Submitting form...")
-        final_submit = submit_sel if submit_sel else "button[type='submit']"
-        if page.locator(final_submit).first.is_visible():
-            page.locator(final_submit).first.click()
+        target_final_submit = ", ".join(submit_sel) if isinstance(submit_sel, list) else (submit_sel if submit_sel else "button[type='submit']")
+        
+        final_submit_locator = page.locator(target_final_submit).first
+        if final_submit_locator.is_visible():
+            final_submit_locator.click()
         else:
             page.keyboard.press("Enter")
         
