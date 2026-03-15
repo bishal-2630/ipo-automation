@@ -707,6 +707,10 @@ def login(page, username, password, dp_name):
         elif page.locator(".toast-message").is_visible():
             error_msg = page.locator(".toast-message").inner_text()
             print(f"⚠️ Login Failed: {error_msg}")
+            try:
+                # Capture screenshot for debugging
+                page.screenshot(path=f"screenshots/login_fail_{username}_{int(time.time())}.png")
+            except: pass
             return False
         else:
              if "dashboard" in page.url or "dashboard" in page.content().lower():
