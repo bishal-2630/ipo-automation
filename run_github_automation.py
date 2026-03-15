@@ -212,6 +212,21 @@ def run_automation():
                         conn.commit()
                         
                         if acc.get('owner_id') and status != "Error" and "No ordinary shares" not in remark:
+                            # 1. New IPO Discovery Notification
+                            if ipo_name and ipo_name != "Auto-Check":
+                                cur.execute("""
+                                    SELECT COUNT(*) FROM automation_applicationlog l
+                                    JOIN automation_account a ON l.account_id = a.id
+                                    WHERE a.owner_id = %s AND l.company_name = %s AND l.status = 'Success'
+                                """, (acc['owner_id'], ipo_name))
+                                has_applied = cur.fetchone()[0] > 0
+                                
+                                if not has_applied:
+                                    cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
+                                    all_tokens = [row[0] for row in cur.fetchall()]
+                                    send_push_notification(all_tokens, "New IPO Found", f"{ipo_name} IPO is available.")
+
+                            # 2. Individual Account Status Notification
                             cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                             tokens = [row[0] for row in cur.fetchall()]
                             send_push_notification(tokens, acc['meroshare_user'], f"{'✅' if status=='Success' else '⚠️'} {status}: {remark}")
