@@ -436,15 +436,41 @@ def login(page, username, password, dp_name):
     # leaving the form invalid. We MUST interact via the UI.
     try:
         # 1. Click the select2 container to open the dropdown
-        page.locator(".select2-selection, .select2-selection--single").first.click(timeout=15000)
-        page.wait_for_timeout(1000)
+        # Try a few selectors and use a retry loop
+        dp_selectors = [
+            ".select2-selection", ".select2-selection--single", "span.select2-selection",
+            "select2 span.select2-selection", "[name='selectBank'] + span.select2-selection"
+        ]
         
+        target_dp_sel = ", ".join(dp_selectors)
+        clicked = False
+        for attempt in range(3):
+            try:
+                print(f"  [DP] Opening dropdown (Attempt {attempt+1})...")
+                dp_elem = page.locator(target_dp_sel).first
+                dp_elem.wait_for(state="visible", timeout=15000)
+                dp_elem.click(force=True)
+                page.wait_for_timeout(1000)
+                
+                # Check if search box is now visible
+                search_box = page.locator(".select2-search__field, .select2-search input").first
+                if search_box.is_visible(timeout=5000):
+                    clicked = True
+                    break
+            except Exception as e:
+                print(f"  [DP] Attempt {attempt+1} failed: {e}")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(1500)
+
+        if not clicked:
+            raise Exception("Failed to open DP dropdown or reach search box after 3 attempts")
+
         # 2. Type a shorter prefix of the DP name into the search box for better results
         # e.g., "NIC ASIA BANK LTD." -> "NIC"
         dp_prefix = dp_name.split()[0] if dp_name.split() else dp_name
-        search_box = page.locator(".select2-search__field, .select2-search input")
-        search_box.first.fill(dp_prefix, timeout=5000)
-        page.wait_for_timeout(1500)
+        search_box = page.locator(".select2-search__field, .select2-search input").first
+        search_box.fill(dp_prefix, timeout=5000)
+        page.wait_for_timeout(2000)
         
         # 3. Find the best match in the results
         success = page.evaluate(f"""

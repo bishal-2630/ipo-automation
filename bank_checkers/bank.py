@@ -656,12 +656,8 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
 
         # Fallback: Regex scraper for currency-like strings
         print("  [Balance Debug] Falling back to regex scraper...")
-        content = page.content()
-        # Remove tags that often contain technical numbers
-        clean_content = re.sub(r'<script.*?>.*?</script>', '', content, flags=re.DOTALL)
-        clean_content = re.sub(r'<style.*?>.*?</style>', '', clean_content, flags=re.DOTALL)
-        clean_content = re.sub(r'<svg.*?>.*?</svg>', '', clean_content, flags=re.DOTALL)
-        clean_content = re.sub(r'<path.*?>', '', clean_content, flags=re.DOTALL)
+        # Use inner_text to avoid technical numbers in HTML attributes (like versions)
+        clean_content = page.inner_text('body')
         
         # 1. Look for Rs. X,XXX.XX or NPR X,XXX.XX (Most accurate)
         matches = re.findall(r'(?:Rs\.?|NPR|Amount|Total|Available)\s*([\d,]+\.\d{2})\b', clean_content, re.IGNORECASE)
