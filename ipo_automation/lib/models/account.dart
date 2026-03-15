@@ -2,6 +2,7 @@ class Account {
   final int id;
   final String user;
   final String bank;
+  final String dpName;
   final String lastApplied;
   final bool isActive;
   final String crn;
@@ -13,6 +14,7 @@ class Account {
     required this.id,
     required this.user,
     required this.bank,
+    required this.dpName,
     required this.lastApplied,
     required this.isActive,
     required this.crn,
@@ -26,6 +28,7 @@ class Account {
       id: json['id'],
       user: json['meroshare_user'],
       bank: json['bank_name'],
+      dpName: json['dp_name'] ?? '',
       lastApplied: json['last_applied'] ?? 'Never',
       isActive: json['is_active'],
       crn: json['crn'] ?? '',

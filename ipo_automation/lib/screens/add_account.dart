@@ -36,7 +36,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (isEditMode) {
       final acc = widget.account!;
       _userController.text = acc.user;
-      _dpController.text = acc.bank;
+      _dpController.text = acc.dpName;
       _crnController.text = acc.crn;
       _pinController.text = acc.tPin;
       _bankController.text = acc.bank;
