@@ -84,7 +84,19 @@ class BankOTPViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return BankOTP.objects.filter(account__owner=self.request.user)
+        queryset = BankOTP.objects.filter(account__owner=self.request.user)
+        
+        # Manual filtering for account and is_used
+        account_id = self.request.query_params.get('account')
+        is_used = self.request.query_params.get('is_used')
+        
+        if account_id:
+            queryset = queryset.filter(account_id=account_id)
+        if is_used is not None:
+            is_used_bool = is_used.lower() == 'true'
+            queryset = queryset.filter(is_used=is_used_bool)
+            
+        return queryset.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         # We allow lookup by account ID or meroshare_user

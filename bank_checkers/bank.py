@@ -6,6 +6,7 @@ Config-driven multi-bank balance checker for Nepali internet banking portals.
 
 from playwright.sync_api import Page
 import re, time, requests, os
+from datetime import datetime
 
 # -------------------------------------------------------------------
 # Bank registry (Comprehensive mapping for Class A & B banks)
@@ -363,6 +364,9 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                     otps = response.json()
                     if otps:
                         latest_otp = otps[0]
+                        created_at = latest_otp.get('created_at', 'unknown')
+                        print(f"  [OTP] Found code {latest_otp['otp_code']} (Created: {created_at})")
+                        
                         requests.patch(
                             f"{api_base}/bank-otps/{latest_otp['id']}/",
                             json={"is_used": True},
@@ -376,14 +380,15 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                 conn = psycopg2.connect(db_url)
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT otp_code, id FROM automation_bankotp "
+                    "SELECT otp_code, id, created_at FROM automation_bankotp "
                     "WHERE account_id = %s AND is_used = false "
                     "ORDER BY created_at DESC LIMIT 1", 
                     (account_id,)
                 )
                 res = cur.fetchone()
                 if res:
-                    otp_code, otp_id = res
+                    otp_code, otp_id, created_at = res
+                    print(f"  [OTP] Found code {otp_code} (Created: {created_at})")
                     cur.execute("UPDATE automation_bankotp SET is_used = true WHERE id = %s", (otp_id,))
                     conn.commit()
                     conn.close()
