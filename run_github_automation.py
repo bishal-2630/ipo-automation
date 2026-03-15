@@ -147,7 +147,7 @@ def run_automation():
                                     if acc.get('owner_id'):
                                         cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                                         tokens = [row[0] for row in cur.fetchall()]
-                                        send_push_notification(tokens, acc['meroshare_user'], f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up.")
+                                        send_push_notification(tokens, acc['meroshare_user'], f"⚠️ Low Balance: Rs.{balance:.2f}. Please make sure your minimum balance is 2000 to apply ipo successfully.")
                                     cur.close()
                                     conn.close()
                                 except: pass
