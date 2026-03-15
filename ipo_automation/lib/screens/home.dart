@@ -136,7 +136,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: () async => setState(() {}),
             child: Column(
               children: [
-                _buildRelayStatusHeader(),
                 Expanded(
                   child: ListView.builder(
                     padding: EdgeInsets.only(bottom: 80),
@@ -167,7 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildEmptyState(String title, String sub) {
     return Column(
       children: [
-        _buildRelayStatusHeader(),
         Expanded(
           child: Center(
             child: Column(
@@ -185,89 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRelayStatusHeader() {
-    return FutureBuilder<SharedPreferences>(
-      future: SharedPreferences.getInstance(),
-      builder: (context, snapshot) {
-        final prefs = snapshot.data;
-        final primaryUser = prefs?.getString('primary_meroshare_user');
-        final isReady = primaryUser != null;
-
-        return Container(
-          padding: EdgeInsets.all(16),
-          color: Colors.deepPurple.withOpacity(0.05),
-          child: Row(
-            children: [
-              Icon(
-                isReady ? Icons.check_circle : Icons.warning_amber_rounded,
-                color: isReady ? Colors.green : Colors.orange,
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Relay Service: ${isReady ? 'Active' : 'Unconfigured'}",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      isReady 
-                        ? "Pushing OTPs for $primaryUser" 
-                        : "Long-press an account below to activate",
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    if (isReady)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: FutureBuilder<SharedPreferences>(
-                          future: SharedPreferences.getInstance(),
-                          builder: (context, snapshot) {
-                            final logs = snapshot.data?.getStringList('relay_debug_logs') ?? [];
-                            if (logs.isEmpty) return SizedBox.shrink();
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text("Recent Activity (Debug):", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                                ...logs.take(3).map((log) => Padding(
-                                  padding: const EdgeInsets.only(top: 2.0),
-                                  child: Text(log, style: TextStyle(fontSize: 9, color: Colors.grey[400])),
-                                )),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (isReady)
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await api.relayOtp(primaryUser!, "999999");
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Test OTP (999999) sent! Check database."), backgroundColor: Colors.green),
-                      );
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Test Failed: $e"), backgroundColor: Colors.red),
-                      );
-                    }
-                  },
-                  child: Text("Test"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildAccountCard(Account acc) {
     return Card(
@@ -312,29 +227,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              FutureBuilder<SharedPreferences>(
-                future: SharedPreferences.getInstance(),
-                builder: (context, snapshot) {
-                  final isPrimary = snapshot.hasData && snapshot.data!.getString('primary_meroshare_user') == acc.user;
-                  if (!isPrimary) return SizedBox.shrink();
-                  return Container(
-                    margin: EdgeInsets.only(bottom: 6),
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.vibration, size: 12, color: Colors.green),
-                        SizedBox(width: 4),
-                        Text("Active OTP Relay", style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  );
-                },
-              ),
               Row(
                 children: [
                   Icon(Icons.account_balance, size: 14, color: Colors.grey),
