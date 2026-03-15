@@ -657,32 +657,45 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         # Fallback: Regex scraper for currency-like strings
         print("  [Balance Debug] Falling back to regex scraper...")
         content = page.content()
+        # Remove tags that often contain technical numbers
         clean_content = re.sub(r'<script.*?>.*?</script>', '', content, flags=re.DOTALL)
         clean_content = re.sub(r'<style.*?>.*?</style>', '', clean_content, flags=re.DOTALL)
+        clean_content = re.sub(r'<svg.*?>.*?</svg>', '', clean_content, flags=re.DOTALL)
+        clean_content = re.sub(r'<path.*?>', '', clean_content, flags=re.DOTALL)
         
-        # Look for Rs. X,XXX.XX or NPR X,XXX.XX
-        matches = re.findall(r'(?:Rs\.?|NPR|Amount)\s*([\d,]+\.\d{2})', clean_content)
+        # 1. Look for Rs. X,XXX.XX or NPR X,XXX.XX (Most accurate)
+        matches = re.findall(r'(?:Rs\.?|NPR|Amount|Total|Available)\s*([\d,]+\.\d{2})\b', clean_content, re.IGNORECASE)
+        
         if not matches:
-             # Look for any digit with commas and 2 decimal places
-             matches = re.findall(r'[\d,]+\.\d{2}', clean_content)
+             # 2. Look for any digit with commas and 2 decimal places with word boundaries
+             matches = re.findall(r'\b[\d,]+\.\d{2}\b', clean_content)
 
         print(f"  [Balance Debug] Found {len(matches)} potential currency matches: {matches}")
         
         valid_balances = []
         for m in matches:
             try:
-                val = float(m.replace(',', ''))
-                # Threshold to avoid small IDs or huge account numbers
-                if 5.0 <= val <= 5000000.0:
-                    context_match = re.search(r'(.{0,40})' + re.escape(m) + r'(.{0,40})', clean_content)
-                    context_text = context_match.group(0).replace('\n', ' ') if context_match else "No context"
+                # Sanitize commas
+                clean_m = m.replace(',', '')
+                # Avoid capturing '1,234.567' as '1,234.56' by checking word boundaries or strictly
+                val = float(clean_m)
+                
+                # Filter out numbers that are likely not balances (too small or exact whole thousands usually)
+                # But a balance of 5.00 is possible. Let's at least check context.
+                if 2.0 <= val <= 10000000.0:
+                    context_match = re.search(r'(.{0,30})' + re.escape(m) + r'(.{0,30})', clean_content)
+                    context_text = context_match.group(0).replace('\n', ' ').strip() if context_match else "No context"
+                    
+                    # Heuristic: skip if context looks like SVG/CSS/Technical
+                    if any(x in context_text.lower() for x in ["px", "transform", "color", "width", "height", "viewbox", "rect"]):
+                        continue
+                        
                     print(f"  [Balance Debug] Candidate: {m} (Context: ...{context_text}...)")
                     valid_balances.append(val)
             except: pass
 
         if valid_balances:
-            # Usually the largest currency amount on a dashboard is the balance if multiple exist
-            # but for NIC Asia, it's often the first one under 'Available'
+            # Usually the first found amount on a dashboard (after stripping headers) is the main balance
             return valid_balances[0]
 
     except Exception as e:
