@@ -755,8 +755,8 @@ def apply_ipo(page, account):
                                       text.includes('promoter');
                     
                     if (isOrdinary && !isExclude) {
-                        // Extract company name (first line or before the first dash)
-                        const rawName = row.innerText.split(/[\\n-]/)[0].trim();
+                        // Extract company name (first line)
+                        const rawName = row.innerText.split('\n')[0].trim();
                         // Clean up if it grabbed headers
                         if (rawName.toLowerCase().includes('company') || rawName.length < 3) continue;
                         
