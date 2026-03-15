@@ -18,8 +18,8 @@ BANK_CONFIGS: dict[str, dict] = {
         "user_sel": ["#nd-input-1", "input[placeholder='Enter Mobile Number']"],
         "pass_sel": ["#nd-input-0", "input[placeholder='Enter Password']", "input[type='password']"],
         "submit_sel": ["button.nd-button--primary", "button:has-text('Log In')"],
-        "dashboard_sel": ".nd-dashboard, .nd-account-card, .available-balance",
-        "balance_sel": ["span.balance-amount", ".available-balance", ".amt-balance", ".nd-balance-value", ".total-balance"],
+        "dashboard_sel": [".nd-dashboard", ".nd-account-card", ".available-balance", "app-dashboard", ".nd-account-list", "nd-card"],
+        "balance_sel": ["span.balance-amount", ".available-balance", ".amt-balance", ".nd-balance-value", ".total-balance", ".account-card__balance"],
     },
     "nabil": {
         "name": "Nabil Bank",
@@ -600,10 +600,15 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
         print(f"  [Dashboard] Waiting for dashboard ({dashboard_sel})...")
         try:
             if isinstance(dashboard_sel, list):
-                page.wait_for_selector(", ".join(dashboard_sel), state="visible", timeout=30000)
+                page.wait_for_selector(", ".join(dashboard_sel), state="visible", timeout=45000)
             else:
-                page.wait_for_selector(dashboard_sel, state="visible", timeout=30000)
-            time.sleep(3) # Wait for dashboard to settle
+                page.wait_for_selector(dashboard_sel, state="visible", timeout=45000)
+            time.sleep(5) # Wait for dashboard to settle
+            
+            # Additional check for loading overlays
+            try:
+                page.wait_for_selector(".loading-overlay, .spinner, .nd-loader", state="hidden", timeout=5000)
+            except: pass
         except:
              print("  ⚠️ Dashboard not detected via selector. Proceeding with fallback scraping...")
 

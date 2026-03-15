@@ -426,7 +426,20 @@ def login(page, username, password, dp_name):
 
     # Wait for the login page to fully load before interacting
     page.wait_for_load_state('networkidle', timeout=30000)
-    page.wait_for_timeout(2000)
+    
+    # Wait for splash screen / loading overlay to disappear
+    try:
+        print(f"  [{username}] Checking for splash screen...")
+        page.wait_for_selector(".splash, #splash, .loader", state="hidden", timeout=10000)
+    except: pass
+
+    # Verify we are on the login page or try to navigate there
+    if "/#/login" not in page.url and "meroshare.cdsc.com.np" in page.url:
+         print(f"  [{username}] Not on login hash ({page.url}). Forcing navigation...")
+         page.goto("https://meroshare.cdsc.com.np/#/login", wait_until="networkidle")
+         page.wait_for_timeout(2000)
+    
+    page.wait_for_timeout(1000)
 
     print(f"Selecting DP: {dp_name}...")
     dp_target = dp_name.lower().strip()
@@ -438,8 +451,11 @@ def login(page, username, password, dp_name):
         # 1. Click the select2 container to open the dropdown
         # Try a few selectors and use a retry loop
         dp_selectors = [
-            ".select2-selection", ".select2-selection--single", "span.select2-selection",
-            "select2 span.select2-selection", "[name='selectBank'] + span.select2-selection"
+            "select2 span.select2-selection",
+            "span.select2-selection",
+            ".select2-selection--single",
+            "[name='selectBank'] + span.select2-selection",
+            ".select2-selection"
         ]
         
         target_dp_sel = ", ".join(dp_selectors)
