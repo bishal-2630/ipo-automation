@@ -35,48 +35,46 @@ class OtpRelayService {
     final address = message.address ?? "";
     print("Incoming SMS from $address: $body");
 
-    // More robust regex for 6-digit OTPs (most common for Nepali banks)
+    // Match 6 digit OTP
     final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
     
-    // Check keywords in body OR sender address (e.g., NICASIA, NABIL)
-    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction', caseSensitive: false)) ||
-                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture', caseSensitive: false));
+    // Check keywords in body OR sender address (e.g., NICASIA, NABIL, 6202)
+    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth', caseSensitive: false)) ||
+                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal', caseSensitive: false));
     
     if (otpMatch != null && isBankingSms) {
       final otp = otpMatch.group(0)!;
       print("OTP Detected: $otp. Attempting relay...");
-      await _relayOtpToBackend(otp);
+      await _relayOtpToBackend(otp, address);
+    } else if (otpMatch != null) {
+      _logRelayEvent(address, "6-digit found but rejected by filters.");
     }
   }
 
-  Future<void> _relayOtpToBackend(String otp) async {
+  Future<void> _relayOtpToBackend(String otp, String address) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // We might need to know which account this OTP belongs to.
-      // For now, we'll try to relay it for the currently active user/account.
-      // Often, messages from banks don't include the username, 
-      // but they might include the last 4 digits of the account number.
-      
-      // In a real scenario, we'd need to map the bank's sender ID or content 
-      // to one of the user's accounts.
-      
-      // For now, we'll assume the user has a primary account or we'll 
-      // broadcast it to all their accounts on the backend.
-      // The backend BankOTPViewSet can handle lookup by meroshare_user.
-      
-      // Let's see if we can find a username in the local storage or if we need to fetch it.
-      // For simplicity, we'll just relay it without a specific user if the backend allows, 
-      // or we'll use a stored username.
       final username = prefs.getString('primary_meroshare_user');
       if (username != null) {
         await _apiService.relayOtp(username, otp);
-        print("OTP relayed successfully for $username");
+        _logRelayEvent(address, "SUCCESS: Relayed $otp to $username");
       } else {
-        print("Primary meroshare user not found in preferences. Cannot relay OTP.");
+        _logRelayEvent(address, "FAILED: No primary user set.");
       }
     } catch (e) {
-      print("Error relaying OTP: $e");
+      _logRelayEvent(address, "ERROR: $e");
     }
+  }
+
+  void _logRelayEvent(String address, String status) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> logs = prefs.getStringList('relay_debug_logs') ?? [];
+      final now = DateTime.now().toString().split(' ')[1].split('.')[0]; // HH:mm:ss
+      logs.insert(0, "[$now] $address: $status");
+      if (logs.length > 5) logs = logs.sublist(0, 5);
+      await prefs.setStringList('relay_debug_logs', logs);
+    } catch (e) {}
   }
 }
 
@@ -85,10 +83,9 @@ void _backgroundMessageHandler(SmsMessage message) async {
   final body = message.body ?? "";
   final address = message.address ?? "";
   
-  // Match foreground logic
   final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
-  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction', caseSensitive: false)) ||
-                      address.contains(RegExp(r'OTP|NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture', caseSensitive: false));
+  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth', caseSensitive: false)) ||
+                      address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal', caseSensitive: false));
 
   if (otpMatch != null && isBankingSms) {
     final otp = otpMatch.group(0)!;
@@ -99,10 +96,23 @@ void _backgroundMessageHandler(SmsMessage message) async {
     if (username != null) {
       try {
         await apiService.relayOtp(username, otp);
+        _staticLogRelayEvent(address, "SUCCESS (BG): Relayed $otp");
       } catch (e) {
-        // Log to console even in background (visible in flutter logs)
-        print("Background OTP relay error: $e");
+        _staticLogRelayEvent(address, "ERROR (BG): $e");
       }
+    } else {
+      _staticLogRelayEvent(address, "FAILED (BG): No primary user.");
     }
   }
+}
+
+void _staticLogRelayEvent(String address, String status) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> logs = prefs.getStringList('relay_debug_logs') ?? [];
+    final now = DateTime.now().toString().split(' ')[1].split('.')[0];
+    logs.insert(0, "[$now] $address: $status");
+    if (logs.length > 5) logs = logs.sublist(0, 5);
+    await prefs.setStringList('relay_debug_logs', logs);
+  } catch (e) {}
 }

@@ -217,6 +217,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         : "Long-press an account below to activate",
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
+                    if (isReady)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: FutureBuilder<SharedPreferences>(
+                          future: SharedPreferences.getInstance(),
+                          builder: (context, snapshot) {
+                            final logs = snapshot.data?.getStringList('relay_debug_logs') ?? [];
+                            if (logs.isEmpty) return SizedBox.shrink();
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("Recent Activity (Debug):", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                ...logs.take(3).map((log) => Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Text(log, style: TextStyle(fontSize: 9, color: Colors.grey[400])),
+                                )),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
