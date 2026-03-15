@@ -237,6 +237,7 @@ class ApiService {
       body['meroshare_user'] = meroshareUser;
     }
     
+    print('DEBUG: Relaying OTP $otpCode to $baseUrl/bank-otps/');
     final response = await http.post(
       Uri.parse('$baseUrl/bank-otps/'),
       headers: {
@@ -245,7 +246,9 @@ class ApiService {
       },
       body: json.encode(body),
     );
+    print('DEBUG: Relay Status: ${response.statusCode}');
     if (response.statusCode != 201) {
+      print('DEBUG: Relay Error: ${response.body}');
       throw Exception('Failed to relay OTP: ${response.body}');
     }
   }
