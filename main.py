@@ -479,13 +479,44 @@ def login(page, username, password, dp_name):
                 page.wait_for_timeout(1500)
 
         if not clicked:
-            raise Exception("Failed to open DP dropdown or reach search box after 3 attempts")
+            print("  [DP] Standard clicks failed. Attempting JS-based force open...")
+            page.evaluate(f"""
+                (sel) => {{
+                    const el = document.querySelector(sel);
+                    if (el) {{
+                        el.click();
+                        // Trigger Select2 internal events if possible
+                        const $el = window.jQuery ? window.jQuery(el) : null;
+                        if ($el && $el.data('select2')) {{
+                            $el.select2('open');
+                        }}
+                    }}
+                }}
+            """, target_dp_sel)
+            page.wait_for_timeout(2000)
+            # Check for search box one last time
+            search_box = page.locator(".select2-search__field, .select2-search input").first
+            search_box_visible = False
+            try:
+                if search_box.is_visible():
+                    search_box_visible = True
+                else:
+                    search_box.wait_for(state="visible", timeout=3000)
+                    search_box_visible = True
+            except: pass
+
+            if not search_box_visible:
+                 print("  [DP] JS force open also failed. Trying keyboard trigger...")
+                 page.locator(target_dp_sel).first.focus()
+                 page.keyboard.press("Enter")
+                 page.wait_for_timeout(1000)
 
         # 2. Type a shorter prefix of the DP name into the search box for better results
         # e.g., "NIC ASIA BANK LTD." -> "NIC"
         dp_prefix = dp_name.split()[0] if dp_name.split() else dp_name
         search_box = page.locator(".select2-search__field, .select2-search input").first
-        search_box.fill(dp_prefix, timeout=5000)
+        search_box.wait_for(state="visible", timeout=5000)
+        search_box.fill(dp_prefix)
         page.wait_for_timeout(2000)
         
         # 3. Find the best match in the results
@@ -607,37 +638,44 @@ def login(page, username, password, dp_name):
     # Small delay to let Angular validation settle
     page.wait_for_timeout(1500)
 
-    # Wait for Login button to become enabled before clicking
-    # If Angular fails to enable it after 5s, we force it enabled.
+    # Aggressive login button handling
     print(f"Clicking Login button for {username}...")
+    login_btn_sel = "button[type='submit'], .btn-login, button:has-text('Login'), .sign-in"
+    login_btn = page.locator(login_btn_sel).first
+    
     try:
-        page.wait_for_function(
-            "() => { const btn = document.querySelector(\"button[type='submit'], button.sign-in, button:has-text('Login')\"); return btn && !btn.disabled; }",
-            timeout=5000
-        )
-    except Exception:
-        print(f"[{username}] ⚠️ Login button still disabled. Forcing aggressive enable...")
-        page.evaluate("""
-            () => {
-                const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-                const btn = buttons.find(b => 
-                    b.type === 'submit' || 
-                    b.classList.contains('sign-in') || 
-                    (b.textContent && b.textContent.trim().toLowerCase() === 'login')
-                );
-                if (btn) {
-                    btn.disabled = false;
-                    btn.removeAttribute('disabled');
-                    btn.classList.remove('disabled');
-                    // Manually trigger Angular's validity if possible
-                    btn.classList.remove('ng-disabled');
-                    btn.style.opacity = '1';
-                    btn.style.pointerEvents = 'auto';
-                }
-            }
-        """)
-        
-    page.click("button:has-text('Login'), button[type='submit'].sign-in, .sign-in", force=True)
+        # Trigger Angular validation by clicking/typing dummy stuff
+        if login_btn.is_visible() and login_btn.is_disabled():
+            print(f"[{username}] ⚠️ Login button still disabled. Triggering validation...")
+            page.locator("#password").first.focus()
+            page.keyboard.press("Space")
+            page.keyboard.press("Backspace")
+            page.wait_for_timeout(1000)
+            
+        if login_btn.is_visible() and login_btn.is_disabled():
+            print(f"[{username}] ⚠️ Still disabled. Forcing aggressive enable...")
+            page.evaluate(f"""
+                (sel) => {{
+                    const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                    const btn = buttons.find(b => 
+                        b.type === 'submit' || 
+                        b.classList.contains('sign-in') || 
+                        (b.textContent && b.textContent.trim().toLowerCase() === 'login')
+                    );
+                    if (btn) {{
+                        btn.disabled = false;
+                        btn.removeAttribute('disabled');
+                        btn.classList.remove('disabled');
+                        btn.classList.remove('ng-disabled');
+                        btn.style.opacity = '1';
+                        btn.style.pointerEvents = 'auto';
+                    }}
+                }}
+            """)
+            page.wait_for_timeout(500)
+    except: pass
+
+    page.click(login_btn_sel, force=True)
     
     # Wait for navigation/dashboard
     try:

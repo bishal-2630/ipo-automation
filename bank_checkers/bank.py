@@ -523,17 +523,33 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
             page.keyboard.press("Enter")
         
         # --- OTP / Approval Handling ---
-        print("  [OTP/Approve] Checking for interaction prompt (waiting up to 15s)...")
+        print("  [OTP/Approve] Polling for OTP screen or Dashboard (up to 30s)...")
         
-        # Check for push approval notification (common in NIC Asia MoBank)
-        # We also check for "Verify Login" text which is the header for NIC Asia's OTP page
-        page.wait_for_load_state('networkidle', timeout=15000)
-        page_text = page.inner_text('body').lower()
-        
-        is_otp_screen = "verify login" in page_text or "verification code" in page_text or "enter otp" in page_text or "enter code" in page_text
-        if is_otp_screen:
-            print("  [OTP] OTP/Verification screen detected by page text.")
+        is_otp_screen = False
+        start_wait = time.time()
+        while time.time() - start_wait < 30:
+            try:
+                page_text = page.inner_text('body').lower()
+                # Check for OTP keywords
+                otp_keywords = config.get('otp_ident', ["verify login", "verification code", "enter otp", "enter code"])
+                if any(kw.lower() in page_text for kw in otp_keywords) or "/verify" in page.url or "/otp" in page.url:
+                    is_otp_screen = True
+                    print(f"  [OTP] OTP/Verification screen detected (URL: {page.url})")
+                    break
+                
+                # Check if we already reached dashboard
+                dash_sels = config.get("dashboard_sel", [".dashboard"])
+                dash_sel = ", ".join(dash_sels) if isinstance(dash_sels, list) else dash_sels
+                if page.locator(dash_sel).first.is_visible():
+                    print("  [Login] Dashboard reached directly.")
+                    break
+                    
+                page.wait_for_timeout(2000)
+            except: 
+                page.wait_for_timeout(2000)
 
+        if is_otp_screen:
+            print("  [OTP] OTP/Verification screen confirmed. Proceeding with polling...")
         if "approve" in page_text or "notification" in page_text or "mobile app" in page_text:
             print("  [Approve] Mobile app approval prompt detected. Please tap 'Approve' on your MoBank app.")
             print("  [Approve] Waiting up to 90s for approval...")
