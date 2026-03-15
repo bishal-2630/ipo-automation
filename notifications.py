@@ -75,9 +75,20 @@ def send_push_notification(tokens, title, body):
                 cred = credentials.Certificate(cred_json)
             firebase_admin.initialize_app(cred)
 
+        android_config = messaging.AndroidConfig(
+            priority='high',
+            notification=messaging.AndroidNotification(
+                channel_id='high_importance_channel',
+                sticky=True,
+                default_vibrate_timings=True,
+                default_sound=True,
+            )
+        )
+        
         message = messaging.MulticastMessage(
             notification=messaging.Notification(title=title, body=body),
             tokens=tokens,
+            android=android_config,
         )
         response = messaging.send_each_for_multicast(message)
         print(f"Push Notification Sent: {response.success_count} success, {response.failure_count} failure")

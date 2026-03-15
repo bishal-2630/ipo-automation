@@ -36,9 +36,20 @@ def send_push_notification(fcm_tokens: list, title: str, body: str):
         return
     if not _init_firebase():
         return
+    android_config = messaging.AndroidConfig(
+        priority='high',
+        notification=messaging.AndroidNotification(
+            channel_id='high_importance_channel',
+            sticky=True,
+            default_vibrate_timings=True,
+            default_sound=True,
+        )
+    )
+    
     message = messaging.MulticastMessage(
         notification=messaging.Notification(title=title, body=body),
         tokens=fcm_tokens,
+        android=android_config,
     )
     try:
         response = messaging.send_each_for_multicast(message)
@@ -110,11 +121,10 @@ def run_automation():
 
             for acc in accounts:
                 print(f"\n{'='*50}\nProcessing: {acc['meroshare_user']}")
-                page = context.new_page()
+                notification_sent = False
                 status = "Error"
                 remark = "Unknown error"
                 ipo_name = "Auto-Check"
-
                 try:
                     # 2. Bank balance check
                     balance = None
@@ -150,6 +160,7 @@ def run_automation():
                                         send_push_notification(tokens, acc['meroshare_user'], f"⚠️ Low Balance: Rs.{balance:.2f}. Please make sure your minimum balance is 2000 to apply ipo successfully.")
                                     cur.close()
                                     conn.close()
+                                    notification_sent = True
                                 except: pass
                                 
                                 page.close()
@@ -211,7 +222,7 @@ def run_automation():
                         """, (acc['id'], ipo_name, status, remark, datetime.datetime.now(datetime.timezone.utc), False))
                         conn.commit()
                         
-                        if acc.get('owner_id') and status != "Error" and "No ordinary shares" not in remark:
+                        if acc.get('owner_id') and status != "Error" and "No ordinary shares" not in remark and not notification_sent:
                             # 1. New IPO Discovery Notification
                             if ipo_name and ipo_name != "Auto-Check":
                                 cur.execute("""
@@ -230,6 +241,7 @@ def run_automation():
                             cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                             tokens = [row[0] for row in cur.fetchall()]
                             send_push_notification(tokens, acc['meroshare_user'], f"{'✅' if status=='Success' else '⚠️'} {status}: {remark}")
+                            notification_sent = True
                         
                         cur.close()
                         conn.close()
