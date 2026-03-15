@@ -711,10 +711,23 @@ def login(page, username, password, dp_name):
         elif page.locator(".toast-message").is_visible():
             error_msg = page.locator(".toast-message").inner_text()
             print(f"⚠️ Login Failed: {error_msg}")
+            
+            # Additional debug info: check what's in the fields
             try:
-                # Capture screenshot for debugging
-                page.screenshot(path=f"screenshots/login_fail_{username}_{int(time.time())}.png")
+                actual_user = page.locator("#username").input_value()
+                if actual_user != username:
+                    print(f"  [Debug] Username field mismatch! Page has '{actual_user}', expected '{username}'")
             except: pass
+            
+            try:
+                # Ensure directory exists on the user's side
+                os.makedirs("screenshots", exist_ok=True)
+                page.wait_for_timeout(500)
+                path = f"screenshots/login_fail_{username}_{int(time.time())}.png"
+                page.screenshot(path=path)
+                print(f"  [Debug] Screenshot saved to {path}")
+            except Exception as e: 
+                print(f"  [Debug] Failed to save screenshot: {e}")
             return False
         else:
              if "dashboard" in page.url or "dashboard" in page.content().lower():
