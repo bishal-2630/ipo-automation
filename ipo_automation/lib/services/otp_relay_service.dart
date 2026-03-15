@@ -28,14 +28,19 @@ class OtpRelayService {
 
   void _handleIncomingSms(SmsMessage message) async {
     final body = message.body ?? "";
-    // More robust regex for 6-8 digit OTPs, catching cases with or without keywords
-    final otpMatch = RegExp(r'\b\d{6,8}\b').firstMatch(body);
+    final address = message.address ?? "";
+    print("Incoming SMS from $address: $body");
+
+    // More robust regex for 6-digit OTPs (most common for Nepali banks)
+    final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
     
-    bool hasBankingKeyword = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|NIC|Nabil|Banking|Transaction', caseSensitive: false));
+    // Check keywords in body OR sender address (e.g., NICASIA, NABIL)
+    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction', caseSensitive: false)) ||
+                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture', caseSensitive: false));
     
-    if (otpMatch != null && hasBankingKeyword) {
+    if (otpMatch != null && isBankingSms) {
       final otp = otpMatch.group(0)!;
-      print("OTP Detected: $otp");
+      print("OTP Detected: $otp. Attempting relay...");
       await _relayOtpToBackend(otp);
     }
   }
@@ -73,23 +78,26 @@ class OtpRelayService {
 
 @pragma('vm:entry-point')
 void _backgroundMessageHandler(SmsMessage message) async {
-  // Handle background OTP detection
   final body = message.body ?? "";
-  if (body.contains(RegExp(r'OTP|code|verification|passcode', caseSensitive: false))) {
-    final otpMatch = RegExp(r'\b\d{6,8}\b').firstMatch(body);
-    if (otpMatch != null) {
-      final otp = otpMatch.group(0)!;
-      
-      final apiService = ApiService();
-      final prefs = await SharedPreferences.getInstance();
-      final username = prefs.getString('primary_meroshare_user');
-      
-      if (username != null) {
-        try {
-          await apiService.relayOtp(username, otp);
-        } catch (e) {
-          print("Background OTP relay error: $e");
-        }
+  final address = message.address ?? "";
+  
+  // Match foreground logic
+  final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
+  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction', caseSensitive: false)) ||
+                      address.contains(RegExp(r'OTP|NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture', caseSensitive: false));
+
+  if (otpMatch != null && isBankingSms) {
+    final otp = otpMatch.group(0)!;
+    final apiService = ApiService();
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('primary_meroshare_user');
+    
+    if (username != null) {
+      try {
+        await apiService.relayOtp(username, otp);
+      } catch (e) {
+        // Log to console even in background (visible in flutter logs)
+        print("Background OTP relay error: $e");
       }
     }
   }

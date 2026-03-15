@@ -214,6 +214,29 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              FutureBuilder<SharedPreferences>(
+                future: SharedPreferences.getInstance(),
+                builder: (context, snapshot) {
+                  final isPrimary = snapshot.hasData && snapshot.data!.getString('primary_meroshare_user') == acc.user;
+                  if (!isPrimary) return SizedBox.shrink();
+                  return Container(
+                    margin: EdgeInsets.only(bottom: 6),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.vibration, size: 12, color: Colors.green),
+                        SizedBox(width: 4),
+                        Text("Active OTP Relay", style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  );
+                },
+              ),
               Row(
                 children: [
                   Icon(Icons.account_balance, size: 14, color: Colors.grey),
@@ -258,6 +281,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+        onTap: () {
+          // Normal tap could show details
+        },
+        onLongPress: () async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('primary_meroshare_user', acc.user);
+          setState(() {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Relay set to ${acc.user}"), backgroundColor: Colors.green),
+            );
+          });
+        },
         trailing: IconButton(
           icon: Icon(Icons.edit, color: Colors.deepPurple),
           onPressed: () async {
