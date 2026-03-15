@@ -15,14 +15,18 @@ class OtpRelayService {
   OtpRelayService._internal();
 
   void initialize() async {
+    print("Initializing OtpRelayService...");
     bool? permissionsGranted = await telephony.requestSmsPermissions;
     if (permissionsGranted != null && permissionsGranted) {
+      print("SMS Permissions GRANTED. Listening for messages...");
       telephony.listenIncomingSms(
         onNewMessage: (SmsMessage message) {
           _handleIncomingSms(message);
         },
         onBackgroundMessage: _backgroundMessageHandler,
       );
+    } else {
+      print("SMS Permissions DENIED. OTP relay will not function.");
     }
   }
 

@@ -134,10 +134,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return RefreshIndicator(
             onRefresh: () async => setState(() {}),
-            child: ListView.builder(
-              padding: EdgeInsets.only(bottom: 80),
-              itemCount: allAccounts.length,
-              itemBuilder: (context, index) => _buildAccountCard(allAccounts[index]),
+            child: Column(
+              children: [
+                _buildRelayStatusHeader(),
+                Expanded(
+                  child: ListView.builder(
+                    padding: EdgeInsets.only(bottom: 80),
+                    itemCount: allAccounts.length,
+                    itemBuilder: (context, index) => _buildAccountCard(allAccounts[index]),
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -158,16 +165,86 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildEmptyState(String title, String sub) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox, size: 80, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(title, style: TextStyle(fontSize: 18, color: Colors.grey)),
-          Text(sub, style: TextStyle(color: Colors.grey)),
-        ],
-      ),
+    return Column(
+      children: [
+        _buildRelayStatusHeader(),
+        Expanded(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox, size: 80, color: Colors.grey),
+                SizedBox(height: 16),
+                Text(title, style: TextStyle(fontSize: 18, color: Colors.grey)),
+                Text(sub, style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRelayStatusHeader() {
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        final prefs = snapshot.data;
+        final primaryUser = prefs?.getString('primary_meroshare_user');
+        final isReady = primaryUser != null;
+
+        return Container(
+          padding: EdgeInsets.all(16),
+          color: Colors.deepPurple.withOpacity(0.05),
+          child: Row(
+            children: [
+              Icon(
+                isReady ? Icons.check_circle : Icons.warning_amber_rounded,
+                color: isReady ? Colors.green : Colors.orange,
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Relay Service: ${isReady ? 'Active' : 'Unconfigured'}",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      isReady 
+                        ? "Pushing OTPs for $primaryUser" 
+                        : "Long-press an account below to activate",
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              if (isReady)
+                ElevatedButton(
+                  onPressed: () async {
+                    try {
+                      await api.relayOtp(primaryUser!, "999999");
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Test OTP (999999) sent! Check database."), backgroundColor: Colors.green),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Test Failed: $e"), backgroundColor: Colors.red),
+                      );
+                    }
+                  },
+                  child: Text("Test"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
