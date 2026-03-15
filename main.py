@@ -546,19 +546,23 @@ def login(page, username, password, dp_name):
                 }}
 
                 if (bestMatch) {{
+                    const selectedName = bestMatch.innerText;
                     bestMatch.click();
-                    return "SUCCESS";
+                    return "SUCCESS:" + selectedName;
                 }}
                 return false;
             }}
         """, dp_name)
         
-        if success == "NO_RESULTS":
+        if success and success.startswith("SUCCESS:"):
+            selected_name = success.split("SUCCESS:")[1]
+            print(f"  [DP] Selected: {selected_name}")
+        elif success == "NO_RESULTS":
             print(f"  ❌ No results found for DP: {dp_name}. Clearing overlay...")
             page.keyboard.press("Escape")
             page.wait_for_timeout(500)
             page.keyboard.press("Escape") # Second escape for safety
-        elif success != "SUCCESS":
+        elif not success or not success.startswith("SUCCESS:"): # Modified condition
             print(f"  Warning: Specific match for '{dp_name}' not found. Clicking first result...")
             first_option = page.locator(".select2-results__option--highlighted, .select2-results__option").first
             if first_option.is_visible() and "No results found" not in first_option.inner_text():

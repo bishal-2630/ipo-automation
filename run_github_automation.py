@@ -199,14 +199,17 @@ def run_automation():
                             status = "Failed"
                             remark = result_detail
                     elif login_result == "EXPIRED":
+                        print(f"  [{acc['meroshare_user']}] Password expired. Handling reset...")
                         if handle_password_reset(page, account_data):
-                            status = "Success"
-                            success, result_detail = apply_ipo(page, account_data)
-                            ipo_name = result_detail if success else "Auto-Check"
-                            remark = f"Applied after password reset" if success else result_detail
+                             status = "Success"
+                             remark = "Password reset successfully. Re-run required."
+                        else:
+                             status = "Failed"
+                             remark = "Password expired and reset failed."
                     else:
+                        print(f"  ❌ MeroShare Login failed for {acc['meroshare_user']}.")
                         status = "Failed"
-                        remark = f"Login failed: {login_result}"
+                        remark = "MeroShare login failed"
 
                 except Exception as e:
                     print(f"  ❌ Inner Exception: {e}")
