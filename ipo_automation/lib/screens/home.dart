@@ -190,10 +190,14 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             Expanded(
-              child: Text(
-                acc.user, 
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    acc.user, 
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
               ),
             ),
             if (acc.ownerName != null && acc.ownerName!.isNotEmpty)
@@ -227,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text(
                       acc.bank, 
                       style: TextStyle(color: Colors.grey[400]),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -241,7 +244,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text(
                       "BOID: ${acc.boid}", 
                       style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
