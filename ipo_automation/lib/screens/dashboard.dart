@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -10,6 +11,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService api = ApiService();
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  List<String> _localLogs = [];
+  bool _showLocalLogs = false;
+
+  Future<void> _loadLocalLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _localLogs = prefs.getStringList('relay_debug_logs') ?? [];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +53,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         return Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("App Relay Events", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() => _showLocalLogs = !_showLocalLogs);
+                      if (_showLocalLogs) _loadLocalLogs();
+                    },
+                    icon: Icon(_showLocalLogs ? Icons.visibility_off : Icons.visibility, size: 16, color: Colors.deepPurple),
+                    label: Text(_showLocalLogs ? "Hide Logs" : "Show Logs", style: TextStyle(fontSize: 12, color: Colors.deepPurple)),
+                  ),
+                ],
+              ),
+            ),
+            if (_showLocalLogs)
+              Container(
+                height: 120,
+                width: double.infinity,
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: _localLogs.isEmpty 
+                  ? Center(child: Text("No background relay events logged yet", style: TextStyle(color: Colors.grey, fontSize: 11)))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _localLogs.length,
+                      itemBuilder: (context, i) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: Text(
+                          _localLogs[i], 
+                          style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.greenAccent),
+                        ),
+                      ),
+                    ),
+              ),
+            Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: TextField(
