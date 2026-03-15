@@ -296,7 +296,7 @@ def fill_and_submit_form(page, account, company_name=None):
         except: pass
 
     try:
-        min_kitta_value = page.evaluate("""
+        min_kitta_value = page.evaluate(r"""
             () => {
                 const labels = Array.from(document.querySelectorAll('label, span, td, th, div'));
                 const minLabel = labels.find(el => {
@@ -307,11 +307,11 @@ def fill_and_submit_form(page, account, company_name=None):
                 if (minLabel) {
                     let parent = minLabel.parentElement;
                     let textContent = parent.innerText;
-                    let matches = textContent.match(/\\d+/g);
+                    let matches = textContent.match(/\d+/g);
                     if (matches && matches.length > 0) return parseInt(matches[matches.length - 1]);
                     if (minLabel.nextElementSibling) {
                         const nextText = minLabel.nextElementSibling.innerText;
-                        const matchNext = nextText.match(/\\d+/);
+                        const matchNext = nextText.match(/\d+/);
                         if (matchNext) return parseInt(matchNext[0]);
                     }
                 }
@@ -525,18 +525,28 @@ def login(page, username, password, dp_name):
                 const options = Array.from(document.querySelectorAll('.select2-results__option'));
                 if (options.length === 0) return false;
                 
-                // If there's a "No results found" message, it usually has this class
                 const noResults = options.find(o => o.innerText.includes('No results found'));
                 if (noResults) return "NO_RESULTS";
 
-                const target = targetName.toLowerCase().trim();
-                const match = options.find(o => o.innerText.toLowerCase().trim().includes(target)) ||
-                              options.find(o => {{
-                                  const text = o.innerText.toLowerCase();
-                                  return target.split(' ').every(word => text.includes(word));
-                              }});
-                if (match) {{
-                    match.click();
+                const clean = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\b(ltd|limited|corp|inc|plc|bank)\b/g, '').trim();
+                const targetClean = clean(targetName);
+                const targetWords = targetClean.split(/\s+/).filter(w => w.length > 1);
+
+                // Strategy 1: Look for most relevant match (intersection of words)
+                let bestMatch = null;
+                let maxMatches = -1;
+
+                for (const o of options) {{
+                    const text = clean(o.innerText);
+                    const matchCount = targetWords.filter(w => text.includes(w)).length;
+                    if (matchCount > maxMatches && matchCount > 0) {{
+                        maxMatches = matchCount;
+                        bestMatch = o;
+                    }}
+                }}
+
+                if (bestMatch) {{
+                    bestMatch.click();
                     return "SUCCESS";
                 }}
                 return false;
@@ -729,7 +739,7 @@ def apply_ipo(page, account):
 
     # Try up to 2 times with a refresh in between if nothing found
     for attempt in range(2):
-        clicked_ipo = page.evaluate("""
+        clicked_ipo = page.evaluate(r"""
             () => {
                 // Find all possible row containers
                 const containers = Array.from(document.querySelectorAll('tr, .row, .list-item, .entry-list-item'));

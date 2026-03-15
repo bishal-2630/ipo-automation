@@ -2,6 +2,7 @@ import 'package:telephony/telephony.dart';
 import 'api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class OtpRelayService {
   final Telephony telephony = Telephony.instance;
@@ -39,9 +40,9 @@ class OtpRelayService {
     // Match 6 digit OTP
     final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
     
-    // Check keywords in body OR sender address (e.g., NICASIA, NABIL, 6202)
-    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth', caseSensitive: false)) ||
-                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal', caseSensitive: false));
+    // Check keywords in body OR sender address
+    bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify', caseSensitive: false)) ||
+                        address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|6202', caseSensitive: false));
     
     if (otpMatch != null && isBankingSms) {
       final otp = otpMatch.group(0)!;
@@ -65,39 +66,76 @@ class OtpRelayService {
     try {
       final prefs = await SharedPreferences.getInstance();
       List<String> logs = prefs.getStringList('relay_debug_logs') ?? [];
-      final now = DateTime.now().toString().split(' ')[1].split('.')[0]; // HH:mm:ss
+      final now = DateTime.now().toString().split(' ')[1].split('.')[0];
       logs.insert(0, "[$now] $address: $status");
-      if (logs.length > 5) logs = logs.sublist(0, 5);
+      if (logs.length > 10) logs = logs.sublist(0, 10);
       await prefs.setStringList('relay_debug_logs', logs);
     } catch (e) {}
   }
 }
 
+// Background handler must be top-level
 @pragma('vm:entry-point')
 void _backgroundMessageHandler(SmsMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
-  final body = message.body ?? "";
-  final address = message.address ?? "";
   
-  _staticLogRelayEvent(address, "BG_DETECTOR: Received raw SMS");
+  final body = message.body ?? "";
+  final address = message.address ?? "Unknown";
+  
+  _staticLogRelayEvent(address, "BG_WAKE: Intercepted SMS");
+
+  // Show a notification immediately so the user knows the app is alive
+  await _showDebugNotification("SMS Intercepted", "From: $address");
 
   final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
-  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth', caseSensitive: false)) ||
-                      address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal', caseSensitive: false));
+  bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth|Confirm|Verify', caseSensitive: false)) ||
+                      address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal|MeShare|6202', caseSensitive: false));
 
   if (otpMatch != null && isBankingSms) {
     final otp = otpMatch.group(0)!;
-    _staticLogRelayEvent(address, "BG_PROCESS: Matching OTP found ($otp). Relaying...");
+    _staticLogRelayEvent(address, "BG_MATCH: OTP Found ($otp)");
     
+    await _showDebugNotification("OTP Detected ($otp)", "Relaying to background...");
+
     final apiService = ApiService();
     try {
       await apiService.relayOtp(null, otp);
-      _staticLogRelayEvent(address, "SUCCESS (BG): Relayed $otp");
+      _staticLogRelayEvent(address, "BG_SUCCESS: Relayed $otp");
+      await _showDebugNotification("OTP Relayed Successfully", "Code $otp has been sent to backend.");
     } catch (e) {
-      _staticLogRelayEvent(address, "ERROR (BG): $e");
+      _staticLogRelayEvent(address, "BG_API_ERROR: $e");
+      await _showDebugNotification("Relay Failed", "Error: $e");
     }
   } else if (otpMatch != null) {
-     _staticLogRelayEvent(address, "BG_REJECT: Filters didn't match.");
+     _staticLogRelayEvent(address, "BG_REJECT: OTP found but filter mismatch.");
+  } else {
+     _staticLogRelayEvent(address, "BG_IGNORE: No OTP code in message.");
+  }
+}
+
+Future<void> _showDebugNotification(String title, String body) async {
+  try {
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+      'otp_relay_debug',
+      'OTP Relay Debug',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      DateTime.now().millisecond,
+      title,
+      body,
+      platformChannelSpecifics,
+    );
+  } catch (e) {
+    print("Failed to show BG notification: $e");
   }
 }
 
@@ -107,7 +145,7 @@ void _staticLogRelayEvent(String address, String status) async {
     List<String> logs = prefs.getStringList('relay_debug_logs') ?? [];
     final now = DateTime.now().toString().split(' ')[1].split('.')[0];
     logs.insert(0, "[$now] $address: $status");
-    if (logs.length > 5) logs = logs.sublist(0, 5);
+    if (logs.length > 20) logs = logs.sublist(0, 20); // More logs for debug
     await prefs.setStringList('relay_debug_logs', logs);
   } catch (e) {}
 }
