@@ -6,7 +6,7 @@ Config-driven multi-bank balance checker for Nepali internet banking portals.
 
 from playwright.sync_api import Page
 import re, time, requests, os
-from datetime import datetime
+from datetime import datetime, timezone
 
 # -------------------------------------------------------------------
 # Bank registry (Comprehensive mapping for Class A & B banks)
@@ -348,6 +348,9 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
         return None
 
     print(f"  [OTP] Waiting up to {timeout_mins} minutes for OTP relay (Account ID: {account_id})...")
+    
+    # We only want OTPs created AFTER the polling started
+    poll_start_time = datetime.now(timezone.utc)
     start_time = time.time()
     
     # We increase the polling frequency at the start and slow down
@@ -364,15 +367,21 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                     otps = response.json()
                     if otps:
                         latest_otp = otps[0]
-                        created_at = latest_otp.get('created_at', 'unknown')
-                        print(f"  [OTP] Found code {latest_otp['otp_code']} (Created: {created_at})")
-                        
-                        requests.patch(
-                            f"{api_base}/bank-otps/{latest_otp['id']}/",
-                            json={"is_used": True},
-                            headers={"Authorization": f"Token {token}"}
-                        )
-                        return latest_otp['otp_code']
+                        # Parse Django REST ISO format (e.g., 2026-03-15T15:00:00Z)
+                        try:
+                            created_at_str = latest_otp.get('created_at', '')
+                            created_at_dt = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                        except:
+                            created_at_dt = None
+
+                        if created_at_dt and created_at_dt >= poll_start_time:
+                            print(f"  [OTP] Found code {latest_otp['otp_code']} (Created: {created_at_str})")
+                            requests.patch(
+                                f"{api_base}/bank-otps/{latest_otp['id']}/",
+                                json={"is_used": True},
+                                headers={"Authorization": f"Token {token}"}
+                            )
+                            return latest_otp['otp_code']
             
             # Plan B: Direct Database Query (Local/Heroku/Server)
             elif db_url:
@@ -382,9 +391,9 @@ def _poll_for_otp(account_id: int, timeout_mins: int = 5) -> str | None:
                 cur.execute(
                     "SELECT otp_code, id, created_at FROM automation_bankotp "
                     "WHERE (account_id = %s OR user_id = (SELECT owner_id FROM automation_account WHERE id = %s)) "
-                    "AND is_used = false "
+                    "AND is_used = false AND created_at >= %s "
                     "ORDER BY created_at DESC LIMIT 1", 
-                    (account_id, account_id)
+                    (account_id, account_id, poll_start_time)
                 )
                 res = cur.fetchone()
                 if res:
