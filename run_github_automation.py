@@ -125,6 +125,7 @@ def run_automation():
                 status = "Error"
                 remark = "Unknown error"
                 ipo_name = "Auto-Check"
+                page = context.new_page()
                 try:
                     # 2. Bank balance check
                     balance = None
