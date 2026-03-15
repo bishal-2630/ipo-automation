@@ -1173,26 +1173,26 @@ def run_status_check():
         page = context.new_page()
 
         try:
-            print("Navigating to https://iporesult.nepsebajar.com/...")
+            print("Navigating to https://result.nabilinvest.com.np/search/ipo-share...")
             # Use domcontentloaded for a faster response on ad-heavy sites
-            page.goto('https://iporesult.nepsebajar.com/', timeout=30000, wait_until='domcontentloaded')
+            page.goto('https://result.nabilinvest.com.np/search/ipo-share', timeout=30000, wait_until='domcontentloaded')
             page.wait_for_timeout(3000)
             
             # 1. Get the list of companies from the dropdown
             try:
-                page.wait_for_selector('select#company_id', timeout=20000)
+                page.wait_for_selector('select[name="company"]', timeout=20000)
                 companies = page.evaluate("""
                     () => {
-                        const select = document.querySelector('select#company_id');
+                        const select = document.querySelector('select[name="company"]');
                         if (!select) return [];
                         const options = Array.from(select.options);
                         return options.map(o => ({ id: o.value, name: o.innerText.trim() }))
-                                      .filter(o => o.id !== '' && o.name !== '');
+                                      .filter(o => o.id !== '' && o.name !== '' && !o.name.includes('-- Select --'));
                     }
                 """)
             except Exception as e:
-                print(f"Error: Nepsebajar page not loaded correctly: {e}")
-                page.screenshot(path="nepsebajar_error.png")
+                print(f"Error: Nabil Invest page not loaded correctly: {e}")
+                page.screenshot(path="nabilinvest_error.png")
                 return
 
             if not companies:
@@ -1210,7 +1210,7 @@ def run_status_check():
                 print(f"\n--- Checking Result for: {company_name} ---")
                 
                 # Select the company
-                page.select_option('select#company_id', company_id)
+                page.select_option('select[name="company"]', company_id)
                 page.wait_for_timeout(1000)
 
                 for account in accounts:
@@ -1246,11 +1246,11 @@ def run_status_check():
                     print(f"[{username}] Checking BOID: {boid}...")
                     
                     # Fill BOID
-                    page.fill('input#demat_number', boid)
+                    page.fill('input[name="boid"]', boid)
                     page.wait_for_timeout(300)
                     
-                    # Click Check Result (Captcha-Free!)
-                    btn = page.locator('button:has-text("Check"), button.bg-blue-600').first
+                    # Click Check Result
+                    btn = page.locator('button[type="submit"], button:has-text("SEARCH")').first
                     btn.click(force=True)
                     
                     # Wait for results modal or content change
@@ -1259,19 +1259,24 @@ def run_status_check():
                     # Extract status from modal or page
                     res = page.evaluate("""
                         () => {
-                            const modal = document.querySelector('.modal-content, .modal, [class*="modal"]');
-                            return modal ? modal.innerText : document.body.innerText;
+                            const resultMsg = document.querySelector('.alert, .message, .swal-text, .swal2-html-container') || document.body;
+                            return resultMsg.innerText || resultMsg.innerHTML;
                         }
                     """)
                     
-                    if "Not Allotted" in res or "not alloted" in res.lower():
+                    if "Not Allotted" in res or "not alloted" in res.lower() or "have not been allotted" in res.lower():
                         feedback = "Not Allotted"
-                    elif "Allotted" in res or "congratulations" in res.lower():
+                    elif "Allotted" in res or "congratulations" in res.lower() or "have been allotted" in res.lower():
                         feedback = "Allotted"
                         # Try to extract Kitta
-                        kitta_match = re.search(r'(\d+)\s*Kitta', res)
+                        kitta_match = re.search(r'(\d+)\s*Kitta', res, re.IGNORECASE)
                         if kitta_match:
                             feedback = f"Allotted: {kitta_match.group(1)} Kitta"
+                        else:
+                            # Nabil invest might say "Congratulations ! You have been allotted XX kitta."
+                            kitta_match2 = re.search(r'allotted\s+(\d+)\s+kitta', res, re.IGNORECASE)
+                            if kitta_match2:
+                                feedback = f"Allotted: {kitta_match2.group(1)} Kitta"
                     else:
                         feedback = "Unknown"
 
