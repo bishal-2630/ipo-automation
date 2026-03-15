@@ -18,8 +18,9 @@ BANK_CONFIGS: dict[str, dict] = {
         "user_sel": ["#nd-input-1", "input[placeholder='Enter Mobile Number']"],
         "pass_sel": ["#nd-input-0", "input[placeholder='Enter Password']", "input[type='password']"],
         "submit_sel": ["button.nd-button--primary", "button:has-text('Log In')"],
-        "dashboard_sel": [".nd-dashboard", ".nd-account-card", ".available-balance", "app-dashboard", ".nd-account-list", "nd-card"],
+        "dashboard_sel": [".nd-dashboard", ".nd-account-card", ".available-balance", "app-dashboard", ".nd-account-list", "nd-card", "app-root .main-view"],
         "balance_sel": ["span.balance-amount", ".available-balance", ".amt-balance", ".nd-balance-value", ".total-balance", ".account-card__balance"],
+        "otp_ident": ["Verify Login", "Verification Code", "Enter OTP"],
     },
     "nabil": {
         "name": "Nabil Bank",
@@ -610,7 +611,13 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
                 page.wait_for_selector(".loading-overlay, .spinner, .nd-loader", state="hidden", timeout=5000)
             except: pass
         except:
-             print("  ⚠️ Dashboard not detected via selector. Proceeding with fallback scraping...")
+             print("  ⚠️ Dashboard not detected via selector. Diagnostics:")
+             print(f"  [Debug] Current URL: {page.url}")
+             try:
+                 txt = page.inner_text('body')
+                 print(f"  [Debug] Page text (start): {txt[:300].replace('\\n', ' ')}")
+             except: pass
+             print("  Proceeding with fallback scraping...")
 
         # Try mapping-specific selectors
         balance_sels = config.get("balance_sel")
