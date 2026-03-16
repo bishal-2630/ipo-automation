@@ -187,34 +187,29 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: Colors.deepPurple.withOpacity(0.1),
           child: Icon(Icons.person, color: Colors.deepPurple),
         ),
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    acc.user, 
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+            Text(
+              acc.user, 
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             if (acc.ownerName != null && acc.ownerName!.isNotEmpty)
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  acc.ownerName!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.deepPurple,
-                    fontWeight: FontWeight.bold,
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    acc.ownerName!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.deepPurple,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
