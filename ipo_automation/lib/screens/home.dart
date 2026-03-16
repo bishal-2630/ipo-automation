@@ -16,28 +16,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService api = ApiService();
-  String? _latestNotification;
-  int _unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _fetchLatestLog();
   }
 
   Future<void> _fetchLatestLog() async {
-    try {
-      final logs = await api.getLogs();
-      if (logs.isNotEmpty) {
-        final latest = logs.first;
-        setState(() {
-          _latestNotification = "📢 ${latest['account_user']}: ${latest['status']}";
-          _unreadCount = logs.where((l) => l['is_read'] == false).length;
-        });
-      }
-    } catch (e) {
-      print("Failed to fetch logs: $e");
-    }
+    // Logic removed as Status tab is now Manage Accounts
   }
 
   int _selectedIndex = 0;
@@ -295,40 +281,14 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: (index) {
         setState(() {
           _selectedIndex = index;
-          if (index == 2) {
-            _unreadCount = 0;
-            api.markLogsAsRead();
-          }
         });
       },
       items: [
         BottomNavigationBarItem(icon: Icon(Icons.wallet), label: 'Accounts'),
         BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Banks'),
         BottomNavigationBarItem(
-          icon: Stack(
-            children: [
-              Icon(Icons.notifications),
-              if (_unreadCount > 0)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    constraints: BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text(
-                      '$_unreadCount',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          label: 'Status',
+          icon: Icon(Icons.manage_accounts),
+          label: 'Manage',
         ),
       ],
     );
