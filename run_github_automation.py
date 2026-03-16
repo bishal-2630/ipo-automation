@@ -148,7 +148,7 @@ def run_automation():
                             print(f"  💰 Found Balance: Rs.{balance:,.2f}")
                             if balance < MIN_BALANCE:
                                 status = "Low Balance"
-                                remark = f"Balance: Rs.{balance:.2f} (min Rs.{MIN_BALANCE:.2f})"
+                                remark = f"Low Balance: Rs.{balance:.2f}. Please make sure your minimum balance is 2000 to apply ipo successfully."
                                 print(f"  ⚠️  Low balance — skipping IPO.")
                                 
                                 # Quick notify for low balance
@@ -158,7 +158,7 @@ def run_automation():
                                     if acc.get('owner_id'):
                                         cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                                         tokens = [row[0] for row in cur.fetchall()]
-                                        send_push_notification(tokens, acc['meroshare_user'], f"⚠️ Low Balance: Rs.{balance:.2f}. Please make sure your minimum balance is 2000 to apply ipo successfully.")
+                                        send_push_notification(tokens, acc['meroshare_user'], f"⚠️ {remark}")
                                     cur.close()
                                     conn.close()
                                     notification_sent = True
@@ -219,12 +219,15 @@ def run_automation():
                     try:
                         conn = psycopg2.connect(DB_URL)
                         cur = conn.cursor()
-                        cur.execute("""
-                            INSERT INTO automation_applicationlog
-                                (account_id, company_name, status, remark, timestamp, is_read)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                        """, (acc['id'], ipo_name, status, remark, datetime.datetime.now(datetime.timezone.utc), False))
-                        conn.commit()
+                        if remark != "No ordinary shares found":
+                            cur.execute("""
+                                INSERT INTO automation_applicationlog
+                                    (account_id, company_name, status, remark, timestamp, is_read)
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                            """, (acc['id'], ipo_name, status, remark, datetime.datetime.now(datetime.timezone.utc), False))
+                            conn.commit()
+                        else:
+                            print(f"  ℹ️  Skipping database log for: {remark}")
                         
                         if acc.get('owner_id') and status != "Error" and "No ordinary shares" not in remark and not notification_sent:
                             # 1. New IPO Discovery Notification

@@ -1190,9 +1190,10 @@ def run_automation():
                     remark = f"Balance: Rs.{balance:.2f}" if balance is not None else "Failed to retrieve balance"
                     
                     if balance is not None and balance < MIN_BALANCE:
-                        print(f"[{username}] ⚠️ Low Balance: Rs.{balance:.2f}")
                         status = "Low Balance"
-                        msg = f"⚠️ Low Balance: Rs.{balance:.2f}. Please top up."
+                        remark = f"Low Balance: Rs.{balance:.2f}. Please make sure your minimum balance is 2000 to apply ipo successfully."
+                        print(f"[{username}] ⚠️ Low Balance: Rs.{balance:.2f}")
+                        msg = f"⚠️ {remark}"
                         send_push_notification(account.get('TOKENS'), username, msg)
                     elif balance is not None:
                         print(f"[{username}] Balance OK: Rs.{balance:.2f}")
