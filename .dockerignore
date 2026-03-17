@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.db.sqlite3
+.env
+.git/
+.vscode/
+venv/
+node_modules/
+ipo_automation/build/
+ipo_automation/ios/
+ipo_automation/android/
+*.apk
+*.log
+globalime_layout_error.png
+status_check_error.png

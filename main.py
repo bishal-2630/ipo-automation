@@ -1445,10 +1445,10 @@ def run_status_check():
                     # Notification logic
                     if "Not Allotted" in feedback:
                         msg = f"❌ Not Allotted: {company_name}."
-                        send_push_notification(account.get('TOKENS'), username, msg)
+                        send_push_notification(account.get('TOKENS'), account.get('ID'), msg)
                     elif "Allotted" in feedback:
-                        msg = f"✅ Allotted: {company_name}! Congratulations."
-                        send_push_notification(account.get('TOKENS'), username, msg)
+                        msg = f"Congratulations!! {company_name} ipo has been allotted."
+                        send_push_notification(account.get('TOKENS'), account.get('ID'), msg)
 
                     # Reset/Clear for next check
                     # We can click a "Reset" button if it exists or just clear the input
@@ -1466,12 +1466,13 @@ def run_status_check():
                             conn = psycopg2.connect(os.getenv("DATABASE_URL"))
                             cur = conn.cursor()
                             status_val = "Not Allotted" if "Not Allotted" in feedback else "Allotted"
+                            is_read = True if status_val == "Allotted" else False
                             cur.execute("""
                                 INSERT INTO automation_applicationlog
                                     (account_id, company_name, status, remark, timestamp, is_read)
                                 VALUES (%s, %s, %s, %s, %s, %s)
                             """, (account.get('ID'), company_name, status_val, feedback,
-                                  datetime.datetime.now(datetime.timezone.utc), False))
+                                  datetime.datetime.now(datetime.timezone.utc), is_read))
                             conn.commit()
                             cur.close()
                             conn.close()

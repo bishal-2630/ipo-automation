@@ -1,0 +1,17 @@
+python-dotenv
+django
+djangorestframework
+django-cors-headers
+celery
+redis
+django-environ
+django-celery-beat
+firebase-admin
+dj-database-url
+psycopg2-binary
+cryptography
+whitenoise
+playwright
+gunicorn
+# easyocr  # Commented out if not strictly needed to save build time/space, but keeping as per original
+easyocr
