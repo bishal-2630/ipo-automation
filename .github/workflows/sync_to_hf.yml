@@ -16,4 +16,4 @@ jobs:
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://bishal-2630:$HF_TOKEN@huggingface.co/spaces/bishal-2630/ipo-automation.git user-part-1:main
+        run: git push --force https://bishal-2630:$HF_TOKEN@huggingface.co/spaces/bishal-2630/ipo_automation.git user-part-1:main
