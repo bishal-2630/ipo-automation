@@ -437,8 +437,27 @@ def check_balance(bank_code: str, phone_number: str, password: str, page: Page, 
 
     print(f"  🏦 Accessing {bank_code.replace('_', ' ').title()} at {target_url}...")
     try:
-        page.goto(target_url, timeout=60000)
-        page.wait_for_load_state('networkidle', timeout=30000)
+        # Robust navigation with retries
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"  [Step] Navigating to {target_url} (Attempt {attempt + 1}/{max_retries})...")
+                # Using wait_until='domcontentloaded' is often more reliable than 'networkidle' for SPA portals
+                page.goto(target_url, timeout=60000, wait_until='domcontentloaded')
+                
+                # Check for a specific element or wait for network idle as a second phase
+                try:
+                    page.wait_for_load_state('networkidle', timeout=30000)
+                except:
+                    print("  ⚠️ Network didn't go idle, but proceeding as DOM is loaded.")
+                
+                break # Success
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    print(f"  ❌ Navigation failed after {max_retries} attempts: {e}")
+                    raise e
+                print(f"  ⚠️ Navigation attempt {attempt + 1} failed: {e}. Retrying in 5s...")
+                time.sleep(5)
 
         # Handle potential location/overlay prompt
         # User requested to click 'Allow while using this site'
