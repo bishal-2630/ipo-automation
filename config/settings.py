@@ -32,6 +32,17 @@ ALLOWED_HOSTS = [
     '.hf.space',
     'localhost',
     '127.0.0.1',
+    '*',
+]
+
+# Production settings for Hugging Face / Proxies
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+X_FRAME_OPTIONS = 'ALLOWALL'
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.hf.space',
+    'https://*.huggingface.co',
 ]
 
 
