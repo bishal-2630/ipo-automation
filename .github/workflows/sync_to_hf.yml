@@ -14,9 +14,6 @@ jobs:
           fetch-depth: 0
           lfs: true
       - name: Push to hub
-        uses: huggingface/github-action@v1
-        with:
-          hf_token: ${{ secrets.HF_TOKEN }}
-          repository: bishal-2630/ipo-automation
-          space: bishal-2630/ipo-automation
-          branch: user-part-1
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: git push --force https://token:$HF_TOKEN@huggingface.co/spaces/bishal-2630/ipo-automation user-part-1:main
