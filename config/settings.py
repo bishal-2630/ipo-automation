@@ -28,6 +28,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'ipoautomation.vercel.app',
     '.vercel.app',
+    'bishal26-ipo-automation.hf.space',
+    '.hf.space',
     'localhost',
     '127.0.0.1',
 ]
