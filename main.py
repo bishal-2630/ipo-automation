@@ -146,7 +146,7 @@ def handle_password_reset(page, account):
             if "success" in toast_text.lower() or "successfully" in toast_text.lower():
                 # Notify User (FCM Only as per preference)
                 msg = f"Password has been changed successfully. Your new password is {new_password}"
-                send_push_notification(account.get('TOKENS'), username, msg)
+                send_push_notification(account.get('TOKENS'), "Account", f"Password Reset - {username} - {msg}")
                 
                 # Update records
                 update_local_account_password(username, new_password)
@@ -166,7 +166,7 @@ def handle_password_reset(page, account):
                  print(f"[{username}] Password reset appears successful (redirected).")
                  # Notify User (FCM Only as per preference)
                  msg = f"Password has been changed successfully. Your new password is {new_password}"
-                 send_push_notification(account.get('TOKENS'), username, msg)
+                 send_push_notification(account.get('TOKENS'), "Account", f"Password Reset - {username} - {msg}")
                  
                  # Update records
                  update_local_account_password(username, new_password)
@@ -391,7 +391,7 @@ def fill_and_submit_form(page, account, company_name=None):
                 msg = f"✅ Success: {company_name} has been applied successfully."
                 subj = f"[MeroShare] Success: {company_name}"
                 send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                send_push_notification(account.get('TOKENS'), username, msg)
+                send_push_notification(account.get('TOKENS'), "Account", f"{username} - {msg}")
                 return True, company_name
             else:
                 error_msg = toast_text
@@ -399,12 +399,12 @@ def fill_and_submit_form(page, account, company_name=None):
                     msg = f"⚠️ Failed: Insufficient balance for {company_name}. Please topup."
                     subj = f"[MeroShare] Failed: {company_name}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                    send_push_notification(account.get('TOKENS'), username, msg)
+                    send_push_notification(account.get('TOKENS'), "Account", f"{username} - {msg}")
                 else:
                     msg = f"❌ Failed: {error_msg} for {company_name}"
                     subj = f"[MeroShare] Failed: {company_name}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                    send_push_notification(account.get('TOKENS'), username, msg)
+                    send_push_notification(account.get('TOKENS'), "Account", f"{username} - {msg}")
                 return False, error_msg
         except:
              if not page.is_visible("#transactionPIN"):

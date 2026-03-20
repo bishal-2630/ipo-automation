@@ -158,7 +158,7 @@ def run_automation():
                                     if acc.get('owner_id'):
                                         cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                                         tokens = [row[0] for row in cur.fetchall()]
-                                        send_push_notification(tokens, acc['meroshare_user'], f"⚠️ {remark}")
+                                        send_push_notification(tokens, "Account", f"Balance Check - {acc['meroshare_user']} - ⚠️ {remark}")
                                     cur.close()
                                     conn.close()
                                     notification_sent = True
@@ -242,12 +242,11 @@ def run_automation():
                                 if not has_applied:
                                     cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                                     all_tokens = [row[0] for row in cur.fetchall()]
-                                    send_push_notification(all_tokens, "New IPO Found", f"{ipo_name} IPO is available.")
+                                    send_push_notification(all_tokens, "Account", f"{ipo_name or 'IPO'} - New IPO is available.")
 
-                            # 2. Individual Account Status Notification
                             cur.execute("SELECT token FROM automation_fcmtoken WHERE user_id = %s", (acc['owner_id'],))
                             tokens = [row[0] for row in cur.fetchall()]
-                            send_push_notification(tokens, acc['meroshare_user'], f"{'✅' if status=='Success' else '⚠️'} {status}: {remark}")
+                            send_push_notification(tokens, "Account", f"{ipo_name or 'IPO'} - {acc['meroshare_user']} - {'✅' if status=='Success' else '⚠️'} {status}: {remark}")
                             notification_sent = True
                         
                         cur.close()

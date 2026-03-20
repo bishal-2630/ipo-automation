@@ -38,8 +38,8 @@ def apply_ipo_task(account_id):
             )
             send_fcm_notification(
                 account_obj.owner,
-                "Automation Error",
-                f"Dependencies missing for {account_obj.meroshare_user}. Please check server logs."
+                "Account",
+                f"IPO Automation - {account_obj.meroshare_user} - ⚠️ Dependencies missing. Please check server logs."
             )
             return
 
@@ -105,18 +105,28 @@ def apply_ipo_task(account_id):
                 login_result = login(page, account_data['MEROSHARE_USER'], account_data['MEROSHARE_PASS'], account_data['DP_NAME'])
                 
                 if login_result is True:
-                    apply_ipo(page, account_data)
+                    success, result_detail = apply_ipo(page, account_data)
+                    company_name = result_detail if success else "IPO Automation"
+                    
                     ApplicationLog.objects.create(
                         account=account_obj,
-                        company_name="IPO Automation",
-                        status="Success",
-                        remark="IPO applied successfully via automation task"
+                        company_name=company_name,
+                        status="Success" if success else "Failed",
+                        remark=f"Result: {result_detail}"
                     )
-                    send_fcm_notification(
-                        account_obj.owner,
-                        "🚀 IPO Applied!",
-                        f"IPO application for {account_obj.meroshare_user} was successful."
-                    )
+                    
+                    if success:
+                        send_fcm_notification(
+                            account_obj.owner,
+                            "Account",
+                            f"{company_name} - {account_obj.meroshare_user} - 🚀 Applied successfully!"
+                        )
+                    else:
+                        send_fcm_notification(
+                            account_obj.owner,
+                            "Account",
+                            f"{company_name} - {account_obj.meroshare_user} - ⚠️ {result_detail}"
+                        )
                 else:
                     ApplicationLog.objects.create(
                         account=account_obj,
@@ -126,8 +136,8 @@ def apply_ipo_task(account_id):
                     )
                     send_fcm_notification(
                         account_obj.owner,
-                        "⚠️ Application Failed",
-                        f"Login failed for {account_obj.meroshare_user}. Please check your credentials."
+                        "Account",
+                        f"IPO Automation - {account_obj.meroshare_user} - ⚠️ Login failed. Please check your credentials."
                     )
             except Exception as e:
                 ApplicationLog.objects.create(
@@ -138,8 +148,8 @@ def apply_ipo_task(account_id):
                 )
                 send_fcm_notification(
                     account_obj.owner,
-                    "❌ Automation Crash",
-                    f"An error occurred while applying for {account_obj.meroshare_user}."
+                    "Account",
+                    f"IPO Automation - {account_obj.meroshare_user} - ❌ Automation crash occurred: {str(e)[:50]}"
                 )
             finally:
                 browser.close()
@@ -155,8 +165,8 @@ def apply_ipo_task(account_id):
             )
             send_fcm_notification(
                 account_obj.owner,
-                "🚨 Critical System Error",
-                "A critical error occurred in the IPO automation system."
+                "Account",
+                "IPO Automation - 🚨 Critical System Error occurred."
             )
 
 @shared_task
