@@ -391,7 +391,7 @@ def fill_and_submit_form(page, account, company_name=None):
                 msg = f"✅ Success: {company_name} has been applied successfully."
                 subj = f"[MeroShare] Success: {company_name}"
                 send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                send_push_notification(account.get('TOKENS'), "Account", f"{username} - {msg}")
+                send_push_notification(account.get('TOKENS'), username, msg)
                 return True, company_name
             else:
                 error_msg = toast_text
@@ -399,12 +399,12 @@ def fill_and_submit_form(page, account, company_name=None):
                     msg = f"⚠️ Failed: Insufficient balance for {company_name}. Please topup."
                     subj = f"[MeroShare] Failed: {company_name}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                    send_push_notification(account.get('TOKENS'), "Account", f"{username} - {msg}")
+                    send_push_notification(account.get('TOKENS'), username, msg)
                 else:
                     msg = f"❌ Failed: {error_msg} for {company_name}"
                     subj = f"[MeroShare] Failed: {company_name}"
                     send_email_notification(account.get('EMAIL'), subj, f"Hi {username},\n\n{msg}")
-                    send_push_notification(account.get('TOKENS'), "Account", f"{username} - {msg}")
+                    send_push_notification(account.get('TOKENS'), username, msg)
                 return False, error_msg
         except:
              if not page.is_visible("#transactionPIN"):
@@ -1428,27 +1428,27 @@ def run_status_check():
                     """)
                     
                     if "no IPO/FPO allotment found" in res_info or "not allotted" in res_info.lower() or "Sorry, no IPO/FPO allotment found" in res_info:
-                        feedback = "Not Allotted"
+                        status_category = "Not Allotted"
+                        feedback = f"{company_name} IPO has not been allotted."
                     elif "congratulations" in res_info.lower() or "have been allotted" in res_info.lower() or "Allotted" in res_info:
-                        feedback = "Allotted"
+                        status_category = "Allotted"
+                        feedback = f"Congratulations!! {company_name} IPO has been allotted successfully."
                         # Try to extract Kitta
                         kitta_match = re.search(r'(\d+)\s*Kitta', res_info, re.IGNORECASE)
                         if kitta_match:
-                            feedback = f"Allotted: {kitta_match.group(1)} Kitta"
+                            feedback = f"Congratulations!! {company_name} IPO has been allotted successfully ({kitta_match.group(1)} Kitta)."
                     else:
-                        feedback = "Unknown"
+                        status_category = "Unknown"
+                        feedback = res_info
                         # DEBUG: Print snippet of res_info if unknown to help refine
                         print(f"[{username}] DEBUG: Raw result text (first 200 chars): {res_info[:200]}")
 
                     print(f"[{username}] Result: {feedback}")
                     
-                    # Notification logic
-                    if "Not Allotted" in feedback:
-                        msg = f"❌ Not Allotted: {company_name}."
-                        send_push_notification(account.get('TOKENS'), account.get('ID'), msg)
-                    elif "Allotted" in feedback:
-                        msg = f"Congratulations!! {company_name} ipo has been allotted."
-                        send_push_notification(account.get('TOKENS'), account.get('ID'), msg)
+                    if status_category == "Not Allotted":
+                        send_push_notification(account.get('TOKENS'), username, feedback)
+                    elif status_category == "Allotted":
+                        send_push_notification(account.get('TOKENS'), username, feedback)
 
                     # Reset/Clear for next check
                     # We can click a "Reset" button if it exists or just clear the input
@@ -1461,17 +1461,16 @@ def run_status_check():
                         page.wait_for_timeout(300)
 
                     # Save to Database Log
-                    if os.getenv("DATABASE_URL") and feedback != "Unknown":
+                    if os.getenv("DATABASE_URL") and status_category != "Unknown":
                         try:
                             conn = psycopg2.connect(os.getenv("DATABASE_URL"))
                             cur = conn.cursor()
-                            status_val = "Not Allotted" if "Not Allotted" in feedback else "Allotted"
-                            is_read = True if status_val == "Allotted" else False
+                            is_read = True if status_category == "Allotted" else False
                             cur.execute("""
                                 INSERT INTO automation_applicationlog
                                     (account_id, company_name, status, remark, timestamp, is_read)
                                 VALUES (%s, %s, %s, %s, %s, %s)
-                            """, (account.get('ID'), company_name, status_val, feedback,
+                            """, (account.get('ID'), company_name, status_category, feedback,
                                   datetime.datetime.now(datetime.timezone.utc), is_read))
                             conn.commit()
                             cur.close()
