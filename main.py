@@ -1432,11 +1432,11 @@ def run_status_check():
                         feedback = f"{company_name} IPO has not been allotted."
                     elif "congratulations" in res_info.lower() or "have been allotted" in res_info.lower() or "Allotted" in res_info:
                         status_category = "Allotted"
-                        feedback = f"Congratulations!! {company_name} IPO has been allotted successfully."
+                        feedback = f"Congratulations!! {company_name} IPO has been allotted."
                         # Try to extract Kitta
                         kitta_match = re.search(r'(\d+)\s*Kitta', res_info, re.IGNORECASE)
                         if kitta_match:
-                            feedback = f"Congratulations!! {company_name} IPO has been allotted successfully ({kitta_match.group(1)} Kitta)."
+                            feedback = f"Congratulations!! {company_name} IPO has been allotted ({kitta_match.group(1)} Kitta)."
                     else:
                         status_category = "Unknown"
                         feedback = res_info
