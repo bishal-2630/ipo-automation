@@ -68,7 +68,8 @@ class ApiService {
       List jsonResponse = json.decode(response.body);
       return jsonResponse.map((data) => Account.fromJson(data)).toList();
     } else {
-      throw Exception('Failed to load accounts');
+      print('DEBUG: Error Body: ${response.body}');
+      throw Exception('Failed to load accounts: status ${response.statusCode}');
     }
   }
 
@@ -164,6 +165,8 @@ class ApiService {
         final data = json.decode(response.body);
         print('-----------------------------------------');
         print('🔧 BACKEND DIAGNOSTICS:');
+        print('URL: $healthUrl');
+        print('STATUS: ONLINE');
         print('VERSION: ${data['version']}');
         print('ENCRYPTION_KEY_LENGTH: ${data['encryption_key_length']}');
         print('ENCRYPTION_KEY_VALID: ${data['encryption_key_valid']}');
@@ -173,7 +176,8 @@ class ApiService {
         print('BRANCH: ${data['branch']}');
         print('-----------------------------------------');
       } else {
-        print('DEBUG: Diagnostics check failed with status ${response.statusCode}');
+        print('DEBUG: Diagnostics check failed with status ${response.statusCode} for $healthUrl');
+        print('DEBUG: Error Body: ${response.body}');
       }
     } catch (e) {
       print('DEBUG: Error fetching diagnostics: $e');
