@@ -141,7 +141,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  "${log['company_name']}",
+                                  "${log['account_user']}",
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -169,14 +169,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             children: [
                               Row(
                                 children: [
-                                  Text("Account: ${log['account_user']}"),
                                   if (log['is_read'] == false) ...[
-                                    SizedBox(width: 8),
                                     Container(
                                       width: 8,
                                       height: 8,
                                       decoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
                                     ),
+                                    SizedBox(width: 6),
                                   ],
                                 ],
                               ),
